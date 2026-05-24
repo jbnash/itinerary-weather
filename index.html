@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cruise Weather — Northern Europe, Jun–Jul 2026</title>
+<style>
+  :root {
+    --bg: #0b1622;
+    --panel: #122033;
+    --panel-2: #1a2c45;
+    --ink: #e9eef5;
+    --muted: #8aa0bb;
+    --accent: #6cc1ff;
+    --warm: #ffb86b;
+    --cold: #9ad7ff;
+    --line: #233a57;
+    --hi: #ffd479;
+    --lo: #9ec7ff;
+    --next: #2a6df4;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; }
+  header {
+    padding: 28px 24px 12px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .updated { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  main {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 16px 24px 48px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card.next {
+    background: linear-gradient(180deg, #1c3563 0%, var(--panel) 60%);
+    border-color: #3a6dd4;
+    box-shadow: 0 0 0 1px #3a6dd4 inset, 0 8px 24px -10px #3a6dd455;
+  }
+  .card.past { opacity: 0.55; }
+  .card.sea { background: var(--panel-2); border-style: dashed; }
+  .badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: var(--next);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 3px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+  }
+  .badge.past { background: #3a4a63; }
+  .head { display: flex; flex-direction: column; gap: 2px; }
+  .port { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  .country { color: var(--muted); font-size: 12px; }
+  .date { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .hours { color: var(--muted); font-size: 12px; }
+  .current {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .icon { font-size: 32px; line-height: 1; }
+  .temp { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; }
+  .cond { color: var(--muted); font-size: 12px; }
+  .meta { display: flex; gap: 12px; font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+  .forecast { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .day .d-icon { font-size: 18px; }
+  .day .d-hi { color: var(--hi); font-weight: 600; font-size: 12px; }
+  .day .d-lo { color: var(--lo); font-size: 11px; }
+  .placeholder { color: var(--muted); font-size: 12px; font-style: italic; padding: 8px 0; }
+  .err { color: #ff9a9a; font-size: 12px; }
+  footer { max-width: 1400px; margin: 0 auto; padding: 0 24px 40px; color: var(--muted); font-size: 11px; }
+  footer a { color: var(--accent); text-decoration: none; }
+  @media (max-width: 480px) {
+    main { padding: 12px; gap: 10px; grid-template-columns: 1fr; }
+    header { padding: 20px 16px 8px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Cruise Weather — Northern Europe</h1>
+  <div class="sub">13 Jun – 11 Jul 2026 · Rotterdam → Norway → UK → Baltic → Rotterdam</div>
+  <div class="updated" id="updated"></div>
+</header>
+<main id="grid"></main>
+<footer>
+  Forecast & current conditions: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>. Ports beyond the 16-day forecast horizon show climate normals for the month, replaced with real forecast as the date approaches.
+</footer>
+
+<script>
+// Each visit gets its own card; duplicates (Rotterdam, Dover) appear chronologically.
+// Coords are port-city centers good enough for marine/coastal conditions.
+const PORTS = [
+  { d: '2026-06-13', name: 'Rotterdam',        country: 'Netherlands',         lat: 51.9225, lon: 4.4792,   arr: '—',       dep: '3:00 PM' },
+  { d: '2026-06-14', name: 'Sea Day',          country: 'North Sea',           lat: 56.0,    lon: 3.5,      sea: true },
+  { d: '2026-06-15', name: 'Eidfjord',         country: 'Norway',              lat: 60.4683, lon: 7.0716,   arr: '8:00 AM', dep: '5:00 PM', note: 'Hardangerfjord scenic cruising' },
+  { d: '2026-06-16', name: 'Måløy',            country: 'Norway',              lat: 61.9356, lon: 5.1136,   arr: '8:00 AM', dep: '5:00 PM' },
+  { d: '2026-06-17', name: 'Trondheim',        country: 'Norway',              lat: 63.4305, lon: 10.3951,  arr: '8:00 AM', dep: '5:00 PM', note: 'Trondheimsfjord scenic cruising' },
+  { d: '2026-06-18', name: 'Sea Day',          country: 'Norwegian Sea',       lat: 66.0,    lon: 9.0,      sea: true },
+  { d: '2026-06-19', name: 'Leknes (Lofoten)', country: 'Norway',              lat: 68.1471, lon: 13.6106,  arr: '7:00 AM', dep: '5:00 PM' },
+  { d: '2026-06-20', name: 'Tromsø',           country: 'Norway',              lat: 69.6492, lon: 18.9553,  arr: '10:00 AM',dep: '6:00 PM' },
+  { d: '2026-06-21', name: 'Honningsvåg',      country: 'Norway · North Cape', lat: 70.9821, lon: 25.9704,  arr: '12:00 PM',dep: '8:00 PM', note: 'North Cape scenic cruising' },
+  { d: '2026-06-22', name: 'Sea Day',          country: 'Norwegian Sea',       lat: 68.0,    lon: 14.0,     sea: true },
+  { d: '2026-06-23', name: 'Sea Day',          country: 'North Sea',           lat: 63.0,    lon: 5.0,      sea: true },
+  { d: '2026-06-24', name: 'Lerwick',          country: 'Shetland Islands, UK',lat: 60.1546, lon: -1.1494,  arr: '8:00 AM', dep: '5:00 PM' },
+  { d: '2026-06-25', name: 'Sea Day',          country: 'North Sea',           lat: 56.0,    lon: 1.0,      sea: true },
+  { d: '2026-06-26', name: 'Dover (London)',   country: 'England, UK',         lat: 51.1279, lon: 1.3134,   arr: '7:00 AM', dep: '6:00 PM' },
+  { d: '2026-06-27', name: 'Rotterdam',        country: 'Netherlands',         lat: 51.9225, lon: 4.4792,   arr: '7:00 AM', dep: '3:00 PM' },
+  { d: '2026-06-28', name: 'Sea Day',          country: 'North Sea',           lat: 55.0,    lon: 7.0,      sea: true },
+  { d: '2026-06-29', name: 'Copenhagen',       country: 'Denmark',             lat: 55.6761, lon: 12.5683,  arr: '8:00 AM', dep: '5:00 PM' },
+  { d: '2026-06-30', name: 'Aarhus',           country: 'Denmark',             lat: 56.1629, lon: 10.2039,  arr: '8:00 AM', dep: '5:00 PM' },
+  { d: '2026-07-01', name: 'Warnemünde (Berlin)', country: 'Germany',          lat: 54.1789, lon: 12.0833,  arr: '6:00 AM', dep: '9:00 PM' },
+  { d: '2026-07-02', name: 'Sea Day',          country: 'Baltic Sea',          lat: 55.0,    lon: 16.0,     sea: true },
+  { d: '2026-07-03', name: 'Tallinn',          country: 'Estonia',             lat: 59.4370, lon: 24.7536,  arr: '8:00 AM', dep: '11:00 PM' },
+  { d: '2026-07-04', name: 'Helsinki',         country: 'Finland',             lat: 60.1699, lon: 24.9384,  arr: '8:00 AM', dep: '5:00 PM' },
+  { d: '2026-07-05', name: 'Stockholm',        country: 'Sweden',              lat: 59.3293, lon: 18.0686,  arr: '8:00 AM', dep: '5:00 PM' },
+  { d: '2026-07-06', name: 'Visby',            country: 'Gotland, Sweden',     lat: 57.6348, lon: 18.2948,  arr: '8:00 AM', dep: '2:00 PM' },
+  { d: '2026-07-07', name: 'Sea Day',          country: 'Baltic Sea',          lat: 58.0,    lon: 17.0,     sea: true },
+  { d: '2026-07-08', name: 'Oslo',             country: 'Norway',              lat: 59.9139, lon: 10.7522,  arr: '7:00 AM', dep: '3:00 PM', note: 'Oslofjord scenic cruising' },
+  { d: '2026-07-09', name: 'Sea Day',          country: 'North Sea',           lat: 57.0,    lon: 5.0,      sea: true },
+  { d: '2026-07-10', name: 'Dover (London)',   country: 'England, UK',         lat: 51.1279, lon: 1.3134,   arr: '4:30 AM', dep: '6:00 PM' },
+  { d: '2026-07-11', name: 'Rotterdam (Debark)', country: 'Netherlands',       lat: 51.9225, lon: 4.4792,   arr: '7:00 AM', dep: '—' },
+];
+
+// WMO weather codes → { icon, label }
+const WMO = {
+  0:  ['☀️','Clear'],
+  1:  ['🌤️','Mostly clear'],
+  2:  ['⛅','Partly cloudy'],
+  3:  ['☁️','Overcast'],
+  45: ['🌫️','Fog'],
+  48: ['🌫️','Rime fog'],
+  51: ['🌦️','Light drizzle'],
+  53: ['🌦️','Drizzle'],
+  55: ['🌧️','Heavy drizzle'],
+  56: ['🌨️','Freezing drizzle'],
+  57: ['🌨️','Freezing drizzle'],
+  61: ['🌦️','Light rain'],
+  63: ['🌧️','Rain'],
+  65: ['🌧️','Heavy rain'],
+  66: ['🌨️','Freezing rain'],
+  67: ['🌨️','Freezing rain'],
+  71: ['🌨️','Light snow'],
+  73: ['🌨️','Snow'],
+  75: ['❄️','Heavy snow'],
+  77: ['🌨️','Snow grains'],
+  80: ['🌦️','Rain showers'],
+  81: ['🌧️','Rain showers'],
+  82: ['⛈️','Violent showers'],
+  85: ['🌨️','Snow showers'],
+  86: ['❄️','Snow showers'],
+  95: ['⛈️','Thunderstorm'],
+  96: ['⛈️','Storm w/ hail'],
+  99: ['⛈️','Storm w/ hail'],
+};
+const wmo = c => WMO[c] || ['❓', '—'];
+
+// Rough climate normals (typical daytime/nighttime °C) for the second half of June / first half of July.
+// Used only when the date is beyond Open-Meteo's 16-day forecast horizon.
+const NORMALS = {
+  'Rotterdam':       { hi: 21, lo: 13, c: 2, label: 'Cool & changeable' },
+  'Eidfjord':        { hi: 18, lo: 9,  c: 3, label: 'Mild, fjord showers likely' },
+  'Måløy':           { hi: 16, lo: 10, c: 3, label: 'Cool, wet & breezy' },
+  'Trondheim':       { hi: 18, lo: 10, c: 2, label: 'Mild, mixed sun & showers' },
+  'Leknes (Lofoten)':{ hi: 14, lo: 8,  c: 3, label: 'Cool, midnight sun' },
+  'Tromsø':          { hi: 14, lo: 8,  c: 3, label: 'Cool, midnight sun' },
+  'Honningsvåg':     { hi: 10, lo: 5,  c: 3, label: 'Cold, foggy, windy' },
+  'Lerwick':         { hi: 13, lo: 9,  c: 3, label: 'Cool, breezy, drizzle' },
+  'Dover (London)':  { hi: 22, lo: 13, c: 2, label: 'Mild & variable' },
+  'Copenhagen':      { hi: 21, lo: 13, c: 2, label: 'Mild Baltic summer' },
+  'Aarhus':          { hi: 21, lo: 12, c: 2, label: 'Mild Baltic summer' },
+  'Warnemünde (Berlin)': { hi: 23, lo: 14, c: 2, label: 'Warm Baltic summer' },
+  'Tallinn':         { hi: 21, lo: 13, c: 2, label: 'Mild Baltic summer' },
+  'Helsinki':        { hi: 21, lo: 13, c: 2, label: 'Mild, long days' },
+  'Stockholm':       { hi: 22, lo: 13, c: 2, label: 'Mild Baltic summer' },
+  'Visby':           { hi: 20, lo: 13, c: 2, label: 'Mild Baltic summer' },
+  'Oslo':            { hi: 22, lo: 13, c: 2, label: 'Mild fjord summer' },
+  'Rotterdam (Debark)': { hi: 22, lo: 14, c: 2, label: 'Mild & variable' },
+};
+
+const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+const todayISO = TODAY.toISOString().slice(0,10);
+const FORECAST_HORIZON = 16; // Open-Meteo free forecast limit
+
+const daysUntil = iso => {
+  const d = new Date(iso + 'T00:00:00');
+  return Math.round((d - TODAY) / 86400000);
+};
+const fmtDate = iso => {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+};
+
+function dayCard(p, idx, nextIdx) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  const du = daysUntil(p.d);
+  if (du < 0) card.classList.add('past');
+  if (p.sea) card.classList.add('sea');
+  if (idx === nextIdx) card.classList.add('next');
+
+  let badge = '';
+  if (idx === nextIdx) badge = '<span class="badge">Next port</span>';
+  else if (du === 0) badge = '<span class="badge">Today</span>';
+  else if (du < 0) badge = '<span class="badge past">Past</span>';
+
+  const hours = p.sea ? '' :
+    `<div class="hours">${p.arr === '—' ? '' : `Arr ${p.arr}`}${p.arr !== '—' && p.dep !== '—' ? ' · ' : ''}${p.dep === '—' ? '' : `Dep ${p.dep}`}</div>`;
+
+  const note = p.note ? `<div class="cond" style="margin-top:2px">${p.note}</div>` : '';
+
+  card.innerHTML = `
+    ${badge}
+    <div class="head">
+      <div class="port">${p.name}</div>
+      <div class="country">${p.country}</div>
+      <div class="date">${fmtDate(p.d)} · ${du === 0 ? 'today' : du > 0 ? `in ${du} day${du===1?'':'s'}` : `${-du} day${du===-1?'':'s'} ago`}</div>
+      ${hours}
+      ${note}
+    </div>
+    <div class="weather"></div>
+  `;
+  return card;
+}
+
+async function fetchForecast(p) {
+  const u = `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}` +
+    `&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m` +
+    `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max` +
+    `&timezone=auto&forecast_days=16&wind_speed_unit=mph&temperature_unit=fahrenheit`;
+  const r = await fetch(u);
+  if (!r.ok) throw new Error('weather fetch failed');
+  return r.json();
+}
+
+function renderForecast(card, p, data) {
+  const w = card.querySelector('.weather');
+  const portDateIdx = data?.daily?.time?.indexOf(p.d) ?? -1;
+
+  // If port date is within the daily window, anchor 5-day strip there. Otherwise default to days 0..4 (i.e. nearest 5 days from today).
+  const startIdx = portDateIdx >= 0 ? portDateIdx : 0;
+  const endIdx = Math.min(startIdx + 5, data.daily.time.length);
+  const days = [];
+  for (let i = startIdx; i < endIdx; i++) {
+    days.push({
+      date: data.daily.time[i],
+      code: data.daily.weather_code[i],
+      hi:   Math.round(data.daily.temperature_2m_max[i]),
+      lo:   Math.round(data.daily.temperature_2m_min[i]),
+      pop:  data.daily.precipitation_probability_max?.[i] ?? null,
+    });
+  }
+
+  const cur = data.current;
+  const [curIcon, curLabel] = wmo(cur.weather_code);
+
+  const isFuture = portDateIdx > 0;
+  const heading = isFuture ? `Forecast for ${fmtDate(p.d)}` : 'Right now';
+
+  let curHTML = '';
+  if (isFuture && days.length) {
+    const d0 = days[0];
+    const [dIcon, dLabel] = wmo(d0.code);
+    curHTML = `
+      <div class="current">
+        <div class="icon">${dIcon}</div>
+        <div style="flex:1">
+          <div class="temp">${d0.hi}° / ${d0.lo}°F</div>
+          <div class="cond">${dLabel}${d0.pop != null ? ` · ${d0.pop}% precip` : ''}</div>
+        </div>
+      </div>`;
+  } else {
+    curHTML = `
+      <div class="current">
+        <div class="icon">${curIcon}</div>
+        <div style="flex:1">
+          <div class="temp">${Math.round(cur.temperature_2m)}°F</div>
+          <div class="cond">${curLabel}</div>
+          <div class="meta">
+            <span>💨 ${Math.round(cur.wind_speed_10m)} mph</span>
+            <span>💧 ${cur.relative_humidity_2m}%</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  const stripHTML = `
+    <div class="forecast">
+      ${days.map(d => {
+        const [ic] = wmo(d.code);
+        const dt = new Date(d.date + 'T00:00:00');
+        const lbl = dt.toLocaleDateString(undefined, { weekday: 'short' });
+        return `<div class="day">
+          <div>${lbl}</div>
+          <div class="d-icon">${ic}</div>
+          <div class="d-hi">${d.hi}°</div>
+          <div class="d-lo">${d.lo}°</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  w.innerHTML = curHTML + stripHTML;
+}
+
+function renderNormal(card, p) {
+  const n = NORMALS[p.name];
+  const w = card.querySelector('.weather');
+  if (!n) { w.innerHTML = '<div class="placeholder">Forecast available closer to arrival.</div>'; return; }
+  const [icon, label] = wmo(n.c);
+  const hiF = Math.round(n.hi * 9/5 + 32);
+  const loF = Math.round(n.lo * 9/5 + 32);
+  const du = daysUntil(p.d);
+  w.innerHTML = `
+    <div class="current">
+      <div class="icon">${icon}</div>
+      <div style="flex:1">
+        <div class="temp">~${hiF}° / ${loF}°F</div>
+        <div class="cond">${n.label}</div>
+      </div>
+    </div>
+    <div class="placeholder" style="text-align:center">Typical ${new Date(p.d+'T00:00:00').toLocaleDateString(undefined,{month:'long'})} conditions. Live forecast unlocks ~${du - FORECAST_HORIZON + 1} day${du - FORECAST_HORIZON + 1 === 1 ? '' : 's'} from now.</div>
+  `;
+}
+
+function renderSea(card, p, data) {
+  const w = card.querySelector('.weather');
+  if (!data) { w.innerHTML = '<div class="placeholder">Cruising at sea.</div>'; return; }
+  const idx = data?.daily?.time?.indexOf(p.d) ?? -1;
+  if (idx < 0) { w.innerHTML = '<div class="placeholder">Cruising at sea.</div>'; return; }
+  const [icon, label] = wmo(data.daily.weather_code[idx]);
+  const hi = Math.round(data.daily.temperature_2m_max[idx]);
+  const lo = Math.round(data.daily.temperature_2m_min[idx]);
+  w.innerHTML = `
+    <div class="current">
+      <div class="icon">${icon}</div>
+      <div style="flex:1">
+        <div class="temp">${hi}° / ${lo}°F</div>
+        <div class="cond">${label} · open water</div>
+      </div>
+    </div>
+    <div class="placeholder" style="text-align:center">Sea day — approximate conditions along route.</div>
+  `;
+}
+
+async function main() {
+  const grid = document.getElementById('grid');
+
+  // Identify "next port" (the next non-past, non-sea-day item)
+  let nextIdx = -1;
+  for (let i = 0; i < PORTS.length; i++) {
+    if (PORTS[i].sea) continue;
+    if (daysUntil(PORTS[i].d) >= 0) { nextIdx = i; break; }
+  }
+
+  // Build all cards first so layout doesn't jump
+  const cards = PORTS.map((p, i) => {
+    const c = dayCard(p, i, nextIdx);
+    grid.appendChild(c);
+    return c;
+  });
+
+  document.getElementById('updated').textContent = `Updated ${new Date().toLocaleString()}`;
+
+  // Fetch concurrently
+  await Promise.all(PORTS.map(async (p, i) => {
+    const card = cards[i];
+    const du = daysUntil(p.d);
+    try {
+      if (p.sea) {
+        // Only fetch for sea days within forecast window
+        if (du >= 0 && du < FORECAST_HORIZON) {
+          const data = await fetchForecast(p);
+          renderSea(card, p, data);
+        } else {
+          renderSea(card, p, null);
+        }
+        return;
+      }
+      if (du < 0) {
+        // past port — show climate normal as a "what it was like" reference
+        renderNormal(card, p);
+        return;
+      }
+      if (du < FORECAST_HORIZON) {
+        const data = await fetchForecast(p);
+        renderForecast(card, p, data);
+      } else {
+        renderNormal(card, p);
+      }
+    } catch (e) {
+      card.querySelector('.weather').innerHTML = `<div class="err">Couldn't load weather — ${e.message}</div>`;
+    }
+  }));
+}
+
+main();
+</script>
+</body>
+</html>
