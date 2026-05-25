@@ -269,6 +269,35 @@
     border-top: 1px solid var(--line);
   }
   .modal-footer a { color: var(--accent); text-decoration: none; }
+
+  /* Track me + live position */
+  .track-me {
+    margin-top: 8px;
+    background: var(--panel-2); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: 5px 11px; font-size: 11.5px; font-weight: 500;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .track-me[aria-pressed="true"] {
+    background: #2a6df4; border-color: #3a6dd4; color: #fff;
+  }
+  .live-status {
+    margin-top: 6px; font-size: 11.5px; color: var(--accent);
+    font-variant-numeric: tabular-nums; display: none;
+    line-height: 1.35;
+  }
+  .live-status.on { display: block; }
+  .live-status .err { color: #ff9a9a; }
+  .live-status .dim { color: var(--dim); }
+
+  .card.live-card {
+    background: linear-gradient(180deg, #1e3b6e 0%, var(--panel) 70%);
+    border-color: #3a6dd4;
+    box-shadow: 0 0 0 1px #3a6dd4 inset, 0 8px 24px -10px #3a6dd455;
+  }
+  .badge.live-badge { background: #d44d4d; animation: livepulse 2s infinite ease-in-out; }
+  @keyframes livepulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
   .placeholder { color: var(--muted); font-size: 11px; font-style: italic; padding: 4px 0; text-align: center; }
   .err { color: #ff9a9a; font-size: 11px; }
   footer { max-width: 1400px; margin: 0 auto; padding: 0 calc(16px + env(safe-area-inset-right)) calc(30px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); color: var(--dim); font-size: 10.5px; }
@@ -284,11 +313,27 @@
   <div class="sub">13 Jun – 11 Jul 2026 · Rotterdam → Norway → UK → Baltic → Rotterdam</div>
   <div class="updated" id="updated"></div>
   <div class="fx" id="fx"></div>
+  <button class="track-me" id="track-me" aria-pressed="false">📍 Track me</button>
+  <div class="live-status" id="live-status"></div>
 </header>
 <main id="grid"></main>
 <footer>
   Weather: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>. Sea state: Open-Meteo Marine (7-day horizon). Sunrise/sunset computed astronomically. Birds: <a href="https://ebird.org" target="_blank" rel="noopener">eBird</a> community sightings. Marine mammals: <a href="https://inaturalist.org" target="_blank" rel="noopener">iNaturalist</a>. Photos: Wikipedia.
 </footer>
+
+<div class="modal" id="lighthouse-modal" role="dialog" aria-modal="true" aria-labelledby="lh-modal-title">
+  <div class="modal-header">
+    <div>
+      <div class="modal-title" id="lh-modal-title">Lighthouses nearby</div>
+      <div class="modal-subtitle">Sorted by distance · updates as you move · tap a tile for the Wikipedia entry</div>
+    </div>
+    <button class="modal-close" id="lh-modal-close" aria-label="Close">✕</button>
+  </div>
+  <div class="modal-body" id="lh-modal-body"></div>
+  <div class="modal-footer">
+    Lighthouse data from <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">OpenStreetMap</a> · photos from Wikipedia
+  </div>
+</div>
 
 <div class="modal" id="bird-modal" role="dialog" aria-modal="true" aria-labelledby="bird-modal-title">
   <div class="modal-header">
@@ -1384,6 +1429,224 @@ async function refreshAll(force = false) {
   }
 }
 
+// ---------- Live GPS tracking ----------
+let LIVE_POS = null;          // current { lat, lon, accuracy, speed, heading, ts }
+let LIVE_HISTORY = [];        // last few readings (for course estimation)
+let WATCH_ID = null;
+const KM_TO_NM = 0.539957;
+
+function bearingDeg(lat1, lon1, lat2, lon2) {
+  const rad = Math.PI / 180;
+  const dLon = (lon2 - lon1) * rad;
+  const y = Math.sin(dLon) * Math.cos(lat2 * rad);
+  const x = Math.cos(lat1 * rad) * Math.sin(lat2 * rad) -
+            Math.sin(lat1 * rad) * Math.cos(lat2 * rad) * Math.cos(dLon);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+function cardinalDir(deg) {
+  if (deg == null || isNaN(deg)) return '';
+  const dirs = ['N','NE','E','SE','S','SW','W','NW'];
+  return dirs[Math.round(deg / 45) % 8];
+}
+function nauticalRelative(relBearing) {
+  const sectors = ['dead ahead','off stbd bow','off stbd beam','off stbd quarter',
+                   'astern','off port quarter','off port beam','off port bow'];
+  return sectors[Math.round(relBearing / 45) % 8];
+}
+function shipCourse() {
+  // Prefer device-provided heading when actually moving; otherwise compute from history.
+  if (LIVE_POS?.heading != null && !isNaN(LIVE_POS.heading) && (LIVE_POS.speed ?? 0) > 0.5) {
+    return LIVE_POS.heading;
+  }
+  if (LIVE_HISTORY.length < 2) return null;
+  const a = LIVE_HISTORY[LIVE_HISTORY.length - 2];
+  const b = LIVE_HISTORY[LIVE_HISTORY.length - 1];
+  if (haversineKm(a.lat, a.lon, b.lat, b.lon) < 0.02) return null;  // didn't really move
+  return bearingDeg(a.lat, a.lon, b.lat, b.lon);
+}
+function bearingLabel(targetLat, targetLon) {
+  // Returns "off port bow" if ship course is known, otherwise cardinal "NW".
+  const tb = bearingDeg(LIVE_POS.lat, LIVE_POS.lon, targetLat, targetLon);
+  const course = shipCourse();
+  if (course != null) return nauticalRelative(((tb - course) % 360 + 360) % 360);
+  return cardinalDir(tb);
+}
+
+function startTracking() {
+  const status = document.getElementById('live-status');
+  if (!navigator.geolocation) {
+    status.classList.add('on');
+    status.innerHTML = '<span class="err">📍 GPS not available on this device</span>';
+    return;
+  }
+  status.classList.add('on');
+  status.textContent = '📍 Requesting location permission…';
+  WATCH_ID = navigator.geolocation.watchPosition(
+    pos => {
+      const { latitude, longitude, accuracy, speed, heading } = pos.coords;
+      LIVE_POS = { lat: latitude, lon: longitude, accuracy, speed, heading, ts: pos.timestamp };
+      LIVE_HISTORY.push(LIVE_POS);
+      if (LIVE_HISTORY.length > 5) LIVE_HISTORY.shift();
+      renderLiveStatus();
+      renderLiveCard();
+      // If lighthouse modal is open, refresh its contents.
+      if (document.getElementById('lighthouse-modal').classList.contains('open')) {
+        populateLighthouseModal();
+      }
+    },
+    err => {
+      const msg = err.code === 1 ? 'Permission denied — tap to retry'
+                 : err.code === 2 ? 'Position unavailable'
+                 : 'GPS timed out';
+      status.innerHTML = `<span class="err">📍 ${msg}</span>`;
+      stopTracking(true);
+    },
+    { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 }
+  );
+}
+function stopTracking(keepErrorMsg = false) {
+  if (WATCH_ID != null) {
+    navigator.geolocation.clearWatch(WATCH_ID);
+    WATCH_ID = null;
+  }
+  LIVE_POS = null;
+  LIVE_HISTORY = [];
+  const btn = document.getElementById('track-me');
+  btn.setAttribute('aria-pressed', 'false');
+  btn.textContent = '📍 Track me';
+  if (!keepErrorMsg) {
+    const s = document.getElementById('live-status');
+    s.classList.remove('on');
+    s.innerHTML = '';
+  }
+  document.getElementById('live-card')?.remove();
+}
+
+function renderLiveStatus() {
+  const s = document.getElementById('live-status');
+  if (!LIVE_POS) return;
+  const knots = (LIVE_POS.speed != null && !isNaN(LIVE_POS.speed) && LIVE_POS.speed > 0.1)
+    ? (LIVE_POS.speed * 1.94384).toFixed(1) + ' kt'
+    : 'stationary';
+  const course = shipCourse();
+  const headingStr = course != null ? `heading ${cardinalDir(course)} ${Math.round(course)}°` : '';
+  // Find next upcoming port + distance
+  let nextPort = null, nextNm = null;
+  for (const p of PORTS) {
+    if (p.sea) continue;
+    if (daysUntil(p.d) < 0) continue;
+    const nm = haversineKm(LIVE_POS.lat, LIVE_POS.lon, p.lat, p.lon) * KM_TO_NM;
+    if (nextPort == null || nm < nextNm) { nextPort = p; nextNm = nm; }
+  }
+  const portStr = nextPort ? `${nextNm.toFixed(1)}nm to ${nextPort.name}` : '';
+  const parts = [knots, headingStr, portStr].filter(Boolean);
+  s.innerHTML = `📍 ${LIVE_POS.lat.toFixed(3)}°, ${LIVE_POS.lon.toFixed(3)}° <span class="dim">±${Math.round(LIVE_POS.accuracy)}m</span> · ${parts.join(' · ')}`;
+}
+
+function renderLiveCard() {
+  if (!LIVE_POS) return;
+  let card = document.getElementById('live-card');
+  if (!card) {
+    card = document.createElement('div');
+    card.id = 'live-card';
+    card.className = 'card live-card';
+    document.getElementById('grid').prepend(card);
+  }
+  const coords = [[LIVE_POS.lat, LIVE_POS.lon]];
+  const lhs = lighthousesNear(coords, 25);  // 25km ≈ 13.5nm
+  const plats = platformsNear(coords, 30);
+  const course = shipCourse();
+  const nmStr = km => (km * KM_TO_NM).toFixed(1);
+
+  const platLine = plats.length
+    ? `<div class="disc-line"><span class="disc-icon">📍</span><span class="disc-body">${plats.map(pl => {
+        const icon = pl.type === 'wind' ? '🌬️' : '🛢️';
+        const dir = bearingLabel(pl.lat, pl.lon);
+        return `${icon} <em>${pl.name}</em> <span class="dim">${nmStr(pl.distKm)}nm ${dir}</span>`;
+      }).join(' · ')}</span></div>`
+    : '';
+
+  const lhLine = lhs.length
+    ? `<div class="disc-line"><span class="disc-icon">🗼</span><span class="disc-body"><button class="lighthouses-trigger"><em>${lhs.length} lighthouse${lhs.length === 1 ? '' : 's'} within 13nm</em> <span class="dim">→ tap for gallery</span></button></span></div>`
+    : `<div class="disc-line"><span class="disc-icon">🗼</span><span class="disc-body dim">No notable lighthouses within 13nm</span></div>`;
+
+  const knots = (LIVE_POS.speed != null && LIVE_POS.speed > 0.1)
+    ? (LIVE_POS.speed * 1.94384).toFixed(1) + ' kt'
+    : 'stationary';
+  const courseStr = course != null ? `${cardinalDir(course)} ${Math.round(course)}°` : '—';
+
+  card.innerHTML = `
+    <span class="badge live-badge">LIVE</span>
+    <div class="head">
+      <div class="port">Live position</div>
+      <div class="country">${LIVE_POS.lat.toFixed(4)}°, ${LIVE_POS.lon.toFixed(4)}° · accuracy ±${Math.round(LIVE_POS.accuracy)}m</div>
+      <div class="row-date">
+        <span>${knots}</span>
+        <span class="sep">·</span>
+        <span>course ${courseStr}</span>
+      </div>
+    </div>
+    <div class="discoveries">
+      ${lhLine}
+      ${platLine}
+    </div>
+  `;
+}
+
+// ---------- Lighthouse gallery modal ----------
+const LH_PHOTOS = {};
+async function getLighthousePhoto(name) {
+  if (LH_PHOTOS[name] !== undefined) return LH_PHOTOS[name];
+  try {
+    const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name.replace(/ /g, '_'))}`);
+    if (!r.ok) { LH_PHOTOS[name] = null; return null; }
+    const j = await r.json();
+    if (j.thumbnail?.source) { LH_PHOTOS[name] = j.thumbnail.source; return j.thumbnail.source; }
+  } catch {}
+  LH_PHOTOS[name] = null;
+  return null;
+}
+
+function populateLighthouseModal() {
+  if (!LIVE_POS) return;
+  const lhs = lighthousesNear([[LIVE_POS.lat, LIVE_POS.lon]], 25);
+  const body = document.getElementById('lh-modal-body');
+  const title = document.getElementById('lh-modal-title');
+  title.textContent = `${lhs.length} lighthouse${lhs.length === 1 ? '' : 's'} within ~13nm`;
+  if (!lhs.length) {
+    body.innerHTML = `<div class="placeholder" style="padding:24px 0">No lighthouses in range right now.</div>`;
+    return;
+  }
+  body.innerHTML = `<div class="bird-grid">${lhs.map(l => {
+    const dir = bearingLabel(l.lat, l.lon);
+    const nm = (l.distKm * KM_TO_NM).toFixed(1);
+    return `<a class="bird-tile" href="https://en.wikipedia.org/wiki/${encodeURIComponent(l.n.replace(/ /g, '_'))}" target="_blank" rel="noopener">
+      <div class="photo-wrap" data-name="${l.n.replace(/"/g, '&quot;')}">🗼</div>
+      <div class="name">${l.n}</div>
+      <div class="meta">${nm}nm · ${dir}</div>
+    </a>`;
+  }).join('')}</div>`;
+  // Lazy-load photos
+  for (const l of lhs) {
+    getLighthousePhoto(l.n).then(url => {
+      if (!url) return;
+      const wrap = body.querySelector(`.photo-wrap[data-name="${CSS.escape(l.n)}"]`);
+      if (!wrap) return;
+      wrap.innerHTML = `<img src="${url}" alt="${l.n}" loading="lazy">`;
+    });
+  }
+}
+function openLighthouseModal() {
+  if (!LIVE_POS) return;
+  document.getElementById('lighthouse-modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  populateLighthouseModal();
+}
+function closeLighthouseModal() {
+  document.getElementById('lighthouse-modal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
 function openBirdModal(port, birds) {
   const modal = document.getElementById('bird-modal');
   const body = document.getElementById('bird-modal-body');
@@ -1451,7 +1714,30 @@ function main() {
     if (e.target.id === 'bird-modal') closeBirdModal();
   });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeBirdModal();
+    if (e.key === 'Escape') { closeBirdModal(); closeLighthouseModal(); }
+  });
+
+  // Track Me toggle + lighthouse modal triggers
+  const trackBtn = document.getElementById('track-me');
+  trackBtn.addEventListener('click', () => {
+    const on = trackBtn.getAttribute('aria-pressed') === 'true';
+    if (on) {
+      stopTracking();
+    } else {
+      trackBtn.setAttribute('aria-pressed', 'true');
+      trackBtn.textContent = '📍 Tracking…';
+      startTracking();
+    }
+  });
+  document.addEventListener('click', e => {
+    if (e.target.closest('.lighthouses-trigger')) {
+      e.preventDefault();
+      openLighthouseModal();
+    }
+  });
+  document.getElementById('lh-modal-close').addEventListener('click', closeLighthouseModal);
+  document.getElementById('lighthouse-modal').addEventListener('click', e => {
+    if (e.target.id === 'lighthouse-modal') closeLighthouseModal();
   });
   setInterval(tickClocks, 30000);
 
