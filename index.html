@@ -756,12 +756,9 @@ function discoveriesHTML(p, wildlife, isSeaDay = false) {
     lines.push(`<div class="disc-line"><span class="disc-icon">📍</span><span class="disc-body">${list}</span></div>`);
   }
 
-  // 2b. Lighthouses near port/coast
-  const lhs = lighthousesNear(coords, isSeaDay ? 30 : 15);
-  if (lhs.length) {
-    const list = lhs.map(l => `<em>${l.n}</em> <span class="dim">${l.distMi}mi</span>`).join(' · ');
-    lines.push(`<div class="disc-line"><span class="disc-icon">🗼</span><span class="disc-body">${list}</span></div>`);
-  }
+  // 2b. Lighthouses — removed from display: without live ship position, "distance from port" is
+  // misleading (you could be passing a different one). LIGHTHOUSES + lighthousesNear() retained
+  // for possible future use if we add AIS tracking via a Worker.
 
   // 3. Curated "what to look for"
   const lookFor = LOOK_FOR[p.d];
