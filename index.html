@@ -299,6 +299,18 @@
   .badge.live-badge { background: #d44d4d; animation: livepulse 2s infinite ease-in-out; }
   @keyframes livepulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
   .placeholder { color: var(--muted); font-size: 11px; font-style: italic; padding: 4px 0; text-align: center; }
+  .past-divider {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--dim);
+    font-size: 10.5px;
+    padding: 16px 0 4px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .past-divider::before, .past-divider::after {
+    content: '— ';
+  }
   .err { color: #ff9a9a; font-size: 11px; }
   footer { max-width: 1400px; margin: 0 auto; padding: 0 calc(16px + env(safe-area-inset-right)) calc(30px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); color: var(--dim); font-size: 10.5px; }
   footer a { color: var(--accent); text-decoration: none; }
@@ -898,11 +910,11 @@ function dayCard(p, idx, nextIdx) {
   const du = daysUntil(p.d);
   if (du < 0) card.classList.add('past');
   if (p.sea) card.classList.add('sea');
-  if (idx === nextIdx) card.classList.add('next');
+  if (idx === nextIdx || du === 0) card.classList.add('next');
 
   let badge = '';
-  if (idx === nextIdx) badge = '<span class="badge">Next</span>';
-  else if (du === 0) badge = '<span class="badge">Today</span>';
+  if (du === 0) badge = '<span class="badge">Today</span>';
+  else if (idx === nextIdx) badge = '<span class="badge">Next port</span>';
   else if (du < 0) badge = '<span class="badge past">Past</span>';
 
   const hoursLine = p.sea ? '' :
@@ -1683,6 +1695,39 @@ function closeBirdModal() {
   document.body.style.overflow = '';
 }
 
+function getCurrentDayIdx() {
+  // Today's card if today matches an itinerary date; otherwise first upcoming (could be NEXT_IDX);
+  // if cruise is over, fall back to 0.
+  const todayISO = TODAY.toISOString().slice(0,10);
+  let idx = PORTS.findIndex(p => p.d === todayISO);
+  if (idx >= 0) return idx;
+  idx = PORTS.findIndex(p => daysUntil(p.d) >= 0);
+  return idx >= 0 ? idx : 0;
+}
+
+function reorderGrid() {
+  const start = getCurrentDayIdx();
+  const grid = document.getElementById('grid');
+  // Detach all current children — both cards and any existing past-divider
+  Array.from(grid.children).forEach(c => c.remove());
+  // Live position card stays at top when tracking is on
+  if (LIVE_POS) {
+    const lc = document.getElementById('live-card') || (() => null)();
+    if (lc) grid.appendChild(lc);
+  }
+  // Today + future
+  for (let i = start; i < PORTS.length; i++) grid.appendChild(CARDS[i]);
+  // Visual break between future and past
+  if (start > 0) {
+    const divider = document.createElement('div');
+    divider.className = 'past-divider';
+    divider.textContent = `${start} day${start === 1 ? '' : 's'} past`;
+    grid.appendChild(divider);
+  }
+  // Past at the end
+  for (let i = 0; i < start; i++) grid.appendChild(CARDS[i]);
+}
+
 function main() {
   const grid = document.getElementById('grid');
   for (let i = 0; i < PORTS.length; i++) {
@@ -1695,6 +1740,7 @@ function main() {
     grid.appendChild(c);
     return c;
   });
+  reorderGrid();
 
   const stamp = document.getElementById('updated');
   stamp.addEventListener('click', () => refreshAll(true));  // manual tap forces wildlife refresh too
