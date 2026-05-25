@@ -84,6 +84,12 @@
   .head { display: flex; flex-direction: column; gap: 1px; }
   .port { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; padding-right: 70px; }
   .country { color: var(--muted); font-size: 11.5px; }
+  .local-time {
+    display: inline-flex; align-items: baseline; gap: 5px;
+    font-size: 11.5px; color: var(--muted); margin-top: 3px;
+  }
+  .local-time .clock { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .local-time .tz { color: var(--dim); font-size: 10.5px; letter-spacing: 0.04em; }
   .row-date { color: var(--muted); font-size: 11.5px; margin-top: 2px; display: flex; gap: 6px; flex-wrap: wrap; }
   .row-date .sep { color: var(--dim); }
   .note { color: var(--dim); font-size: 11px; margin-top: 1px; font-style: italic; }
@@ -226,6 +232,21 @@ const MARINE_HORIZON = 7;
 const daysUntil = iso => Math.round((new Date(iso+'T00:00:00') - TODAY) / 86400000);
 const fmtDate = iso => new Date(iso+'T00:00:00').toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
 
+function localNow(tz) {
+  const now = new Date();
+  const time = now.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit', timeZone: tz });
+  const tzName = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' })
+    .formatToParts(now).find(p => p.type === 'timeZoneName')?.value || '';
+  return { time, tzName };
+}
+function tickClocks() {
+  document.querySelectorAll('[data-tz]').forEach(el => {
+    const { time, tzName } = localNow(el.dataset.tz);
+    el.querySelector('.clock').textContent = time;
+    el.querySelector('.tz').textContent = tzName;
+  });
+}
+
 // Astronomical sunrise/sunset (NOAA approximation). Returns local-clock times for the port's timezone.
 // Returns { sunrise, sunset, daylightHours } OR { midnightSun: true, daylightHours: 24 } OR { polarNight: true, daylightHours: 0 }
 function sunTimes(iso, lat, lon, tz) {
@@ -336,11 +357,15 @@ function dayCard(p, idx, nextIdx) {
   const note = p.note ? `<div class="note">${p.note}</div>` : '';
   const whenLabel = du === 0 ? 'today' : du > 0 ? `in ${du}d` : `${-du}d ago`;
 
+  const { time, tzName } = localNow(p.tz);
   card.innerHTML = `
     ${badge}
     <div class="head">
       <div class="port">${p.name}</div>
       <div class="country">${p.country}</div>
+      <div class="local-time" data-tz="${p.tz}" title="Local clock at ${p.name}">
+        <span>🕒</span><span class="clock">${time}</span><span class="tz">${tzName}</span>
+      </div>
       <div class="row-date">
         <span>${fmtDate(p.d)}</span>
         <span class="sep">·</span>
@@ -557,6 +582,7 @@ async function main() {
   });
 
   document.getElementById('updated').textContent = `Updated ${new Date().toLocaleString()}`;
+  setInterval(tickClocks, 30000);
 
   await Promise.all(PORTS.map(async (p, i) => {
     const card = cards[i];
