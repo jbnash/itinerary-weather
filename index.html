@@ -117,6 +117,7 @@
   }
   .icon { font-size: 30px; line-height: 1; }
   .temp { font-size: 25px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+  .temp-c { font-size: 13px; color: var(--muted); margin-top: 1px; line-height: 1.2; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
   .cond { color: var(--muted); font-size: 11.5px; margin-top: 1px; }
   .meta { display: flex; gap: 10px; font-size: 10.5px; color: var(--muted); flex-wrap: wrap; margin-top: 3px; }
   .meta .wave { color: var(--wave); }
@@ -395,6 +396,24 @@ async function fetchMarine(p) {
 }
 
 const mToFt = m => m == null ? null : m * 3.28084;
+const fToC = f => (f - 32) * 5/9;
+// Format hi/lo F + matching C line. hi/lo can be numbers (single value) or {min,max} (ranges).
+function tempPair(hi, lo) {
+  const isRange = v => v && typeof v === 'object';
+  const rngStr = (v, unit) => {
+    const lo2 = Math.round(v.min), hi2 = Math.round(v.max);
+    return hi2 - lo2 <= 1 ? `${hi2}${unit}` : `${lo2}–${hi2}${unit}`;
+  };
+  const toC = v => isRange(v) ? { min: fToC(v.min), max: fToC(v.max) } : fToC(v);
+  const numStr = (v, unit) => isRange(v) ? rngStr(v, unit) : `${Math.round(v)}${unit}`;
+  const fLine = lo != null
+    ? `${numStr(hi, '°')} / ${numStr(lo, '°F')}`
+    : `${numStr(hi, '°F')}`;
+  const cLine = lo != null
+    ? `${numStr(toC(hi), '°')} / ${numStr(toC(lo), '°C')}`
+    : `${numStr(toC(hi), '°C')}`;
+  return { f: fLine, c: cLine };
+}
 const seaState = ft => {
   if (ft == null) return '';
   if (ft < 1) return 'Calm';
@@ -496,21 +515,25 @@ function renderForecast(card, p, data, marine, isNext) {
   if (isFuture && days.length) {
     const d0 = days[0];
     const [dIcon, dLabel] = wmo(d0.code);
+    const tp = tempPair(d0.hi, d0.lo);
     curHTML = `
       <div class="current">
         <div class="icon">${dIcon}</div>
         <div style="flex:1">
-          <div class="temp">${d0.hi}° / ${d0.lo}°F</div>
+          <div class="temp">${tp.f}</div>
+          <div class="temp-c">${tp.c}</div>
           <div class="cond">${dLabel}${d0.pop != null ? ` · ${d0.pop}% precip` : ''}</div>
           ${wave ? `<div class="meta">${wave}</div>` : ''}
         </div>
       </div>`;
   } else {
+    const tp = tempPair(cur.temperature_2m);
     curHTML = `
       <div class="current">
         <div class="icon">${curIcon}</div>
         <div style="flex:1">
-          <div class="temp">${Math.round(cur.temperature_2m)}°F</div>
+          <div class="temp">${tp.f}</div>
+          <div class="temp-c">${tp.c}</div>
           <div class="cond">${curLabel}</div>
           <div class="meta">
             <span>💨 ${Math.round(cur.wind_speed_10m)} mph</span>
@@ -592,13 +615,15 @@ function renderNormal(card, p) {
   const du = daysUntil(p.d);
   if (!n) { w.innerHTML = '<div class="placeholder">Forecast available closer to arrival.</div>' + sunHTML(p); return; }
   const [icon] = wmo(n.c);
-  const hiF = Math.round(n.hi * 9/5 + 32);
-  const loF = Math.round(n.lo * 9/5 + 32);
+  const hiF = n.hi * 9/5 + 32;
+  const loF = n.lo * 9/5 + 32;
+  const tp = tempPair(hiF, loF);
   w.innerHTML = `
     <div class="current">
       <div class="icon">${icon}</div>
       <div style="flex:1">
-        <div class="temp">~${hiF}° / ${loF}°F</div>
+        <div class="temp">~${tp.f}</div>
+        <div class="temp-c">~${tp.c}</div>
         <div class="cond">${n.label}</div>
       </div>
     </div>
@@ -664,7 +689,7 @@ const fmtWaveRange = (m) => {
 function renderSeaRoute(card, p, route, agg, marineAgg, data0) {
   const w = card.querySelector('.weather');
   const [icon, label] = wmo(agg.code);
-  const tempLine = `${fmtRange(agg.hi, '°')} / ${fmtRange(agg.lo, '°F')}`;
+  const tp = tempPair(agg.hi, agg.lo);
   const wave = marineAgg
     ? `<span class="wave">🌊 ${fmtWaveRange(marineAgg)} · ${seaState(mToFt(marineAgg.maxM))}${marineAgg.avgPeriod ? ' · ' + Math.round(marineAgg.avgPeriod) + 's' : ''}</span>`
     : '';
@@ -696,7 +721,8 @@ function renderSeaRoute(card, p, route, agg, marineAgg, data0) {
     <div class="current">
       <div class="icon">${icon}</div>
       <div style="flex:1">
-        <div class="temp">${tempLine}</div>
+        <div class="temp">${tp.f}</div>
+        <div class="temp-c">${tp.c}</div>
         <div class="cond">${label} · ${agg.pop}% precip</div>
         <div class="meta">
           <span>💨 ${fmtRange(agg.wind, '')} mph</span>
@@ -722,13 +748,15 @@ function renderSea(card, p, data, marine) {
     return;
   }
   const [icon, label] = wmo(data.daily.weather_code[idx]);
-  const hi = Math.round(data.daily.temperature_2m_max[idx]);
-  const lo = Math.round(data.daily.temperature_2m_min[idx]);
+  const hi = data.daily.temperature_2m_max[idx];
+  const lo = data.daily.temperature_2m_min[idx];
+  const tp = tempPair(hi, lo);
   w.innerHTML = `
     <div class="current">
       <div class="icon">${icon}</div>
       <div style="flex:1">
-        <div class="temp">${hi}° / ${lo}°F</div>
+        <div class="temp">${tp.f}</div>
+        <div class="temp-c">${tp.c}</div>
         <div class="cond">${label} · open water</div>
         ${wave ? `<div class="meta">${wave}</div>` : ''}
       </div>
