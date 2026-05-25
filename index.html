@@ -105,6 +105,7 @@
   .local-time .clock { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
   .local-time .tz { color: var(--dim); font-size: 10.5px; letter-spacing: 0.04em; }
   .row-date { color: var(--muted); font-size: 11.5px; margin-top: 2px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .row-date .day-num { color: var(--accent); font-weight: 600; letter-spacing: 0.01em; }
   .row-date .sep { color: var(--dim); }
   .note { color: var(--dim); font-size: 11px; margin-top: 1px; font-style: italic; }
   .current {
@@ -454,6 +455,8 @@ function dayCard(p, idx, nextIdx) {
         <span>🕒</span><span class="clock">${time}</span><span class="tz">${tzName}</span>
       </div>
       <div class="row-date">
+        <span class="day-num">Day ${idx + 1}</span>
+        <span class="sep">·</span>
         <span>${fmtDate(p.d)}</span>
         <span class="sep">·</span>
         <span>${whenLabel}</span>
@@ -470,7 +473,7 @@ function sunHTML(p) {
   const s = sunTimes(p.d, p.lat, p.lon, p.tz);
   if (s.midnightSun) return `<div class="sun"><span class="midnight">☀️ Midnight sun</span><span>daylight 24h</span></div>`;
   if (s.polarNight)  return `<div class="sun"><span class="polar">🌑 Polar night</span><span>0h daylight</span></div>`;
-  return `<div class="sun"><span>🌅 ${s.sunrise}</span><span>🌇 ${s.sunset}</span><span>☀️ ${fmtDuration(s.daylightHours)}</span></div>`;
+  return `<div class="sun"><span>☀️↑ ${s.sunrise}</span><span>☀️↓ ${s.sunset}</span><span>${fmtDuration(s.daylightHours)} daylight</span></div>`;
 }
 
 function waveLineHTML(marine, dateISO) {
