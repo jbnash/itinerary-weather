@@ -589,7 +589,7 @@ const NORMALS = {
   'Rotterdam (Debark)': { hi: 22, lo: 14, c: 2, label: 'Mild & variable' },
 };
 
-const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+let TODAY = new Date(); TODAY.setHours(0,0,0,0);
 const FORECAST_HORIZON = 16;
 const MARINE_HORIZON = 7;
 const daysUntil = iso => Math.round((new Date(iso+'T00:00:00') - TODAY) / 86400000);
@@ -1434,6 +1434,7 @@ async function refreshAll(force = false) {
     renderFx();
     await Promise.all(PORTS.map((p, i) => loadWeatherFor(p, CARDS[i], i, i === NEXT_IDX)));
     LAST_FETCH = Date.now();
+    saveCache();  // persist refreshed wildlife / birds / fx for next session
     stamp.textContent = `Updated ${new Date().toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' })} · tap to refresh`;
   } catch (e) {
     stamp.textContent = `Refresh failed — tap to retry`;
@@ -1661,6 +1662,80 @@ function closeLighthouseModal() {
   document.body.style.overflow = '';
 }
 
+// ---------- localStorage cache (wildlife / birds / fx) ----------
+// Survives page closes so the app paints instantly + works briefly when cellular is spotty.
+// Weather forecasts aren't cached — they're time-sensitive and refetch fast.
+const CACHE_KEY = 'cruise-weather-cache-v1';
+const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days; older than that, ignore
+function loadCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (!d || Date.now() - (d.savedAt || 0) > CACHE_MAX_AGE_MS) return;
+    if (Array.isArray(d.wildlife) && d.wildlife.length === PORTS.length) {
+      for (let i = 0; i < PORTS.length; i++) WILDLIFE[i] = d.wildlife[i];
+    }
+    if (Array.isArray(d.birds) && d.birds.length === PORTS.length) {
+      for (let i = 0; i < PORTS.length; i++) BIRDS[i] = d.birds[i];
+    }
+    if (d.fx) { FX_RATES = d.fx; FX_FETCH_AT = d.fxAt || 0; }
+    if (d.wildlifeAt) LAST_WILDLIFE_FETCH = d.wildlifeAt;
+  } catch {}
+}
+function saveCache() {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      wildlife: WILDLIFE, birds: BIRDS,
+      fx: FX_RATES, fxAt: FX_FETCH_AT,
+      wildlifeAt: LAST_WILDLIFE_FETCH,
+    }));
+  } catch {}  // quota / private mode / etc — silent
+}
+
+// ---------- Midnight reorder ----------
+// If the app sits open across midnight, the date crossover invalidates badges + ordering.
+// Cheap check on visibility change AND every 5 minutes.
+function handleDateChange() {
+  // Recompute NEXT_IDX
+  NEXT_IDX = -1;
+  for (let i = 0; i < PORTS.length; i++) {
+    if (PORTS[i].sea) continue;
+    if (daysUntil(PORTS[i].d) >= 0) { NEXT_IDX = i; break; }
+  }
+  // Update each card's badge, class, and "in N days" label
+  for (let i = 0; i < PORTS.length; i++) {
+    const card = CARDS[i];
+    const p = PORTS[i];
+    const du = daysUntil(p.d);
+    card.classList.toggle('past', du < 0);
+    card.classList.toggle('next', i === NEXT_IDX || du === 0);
+    card.querySelector('.badge')?.remove();
+    let badgeHTML = '';
+    if (du === 0) badgeHTML = '<span class="badge">Today</span>';
+    else if (i === NEXT_IDX) badgeHTML = '<span class="badge">Next port</span>';
+    else if (du < 0) badgeHTML = '<span class="badge past">Past</span>';
+    if (badgeHTML) card.insertAdjacentHTML('afterbegin', badgeHTML);
+    // The "in Nd / today / Nd ago" span is the 3rd non-separator in .row-date.
+    const labels = card.querySelectorAll('.row-date > span:not(.sep):not(.day-num)');
+    if (labels.length >= 2) {
+      labels[1].textContent = du === 0 ? 'today' : du > 0 ? `in ${du}d` : `${-du}d ago`;
+    }
+  }
+  reorderGrid();
+  refreshAll();  // also re-fetch in case a port newly entered the forecast window
+}
+function checkDateChanged() {
+  const now = new Date(); now.setHours(0,0,0,0);
+  if (now.getTime() !== TODAY.getTime()) {
+    TODAY = now;
+    handleDateChange();
+    return true;
+  }
+  return false;
+}
+
 function openBirdModal(port, birds) {
   const modal = document.getElementById('bird-modal');
   const body = document.getElementById('bird-modal-body');
@@ -1729,6 +1804,8 @@ function reorderGrid() {
 }
 
 function main() {
+  loadCache();  // populate WILDLIFE / BIRDS / FX from localStorage so first paint shows real data
+
   const grid = document.getElementById('grid');
   for (let i = 0; i < PORTS.length; i++) {
     if (PORTS[i].sea) continue;
@@ -1741,6 +1818,7 @@ function main() {
     return c;
   });
   reorderGrid();
+  renderFx();  // paint cached FX immediately, before refreshAll completes
 
   const stamp = document.getElementById('updated');
   stamp.addEventListener('click', () => refreshAll(true));  // manual tap forces wildlife refresh too
@@ -1790,14 +1868,18 @@ function main() {
 
   // Re-fetch when the app becomes visible after being backgrounded — covers homescreen-PWA "open" event.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && Date.now() - LAST_FETCH > STALE_MS) {
-      refreshAll();
-    }
+    if (document.visibilityState !== 'visible') return;
+    if (checkDateChanged()) return;  // handleDateChange already runs refreshAll
+    if (Date.now() - LAST_FETCH > STALE_MS) refreshAll();
   });
   // Periodic background refresh while in foreground.
   setInterval(() => {
     if (document.visibilityState === 'visible') refreshAll();
   }, REFRESH_MS);
+  // Cheap midnight check — every 5 minutes, see if the calendar date has rolled over.
+  setInterval(() => {
+    if (document.visibilityState === 'visible') checkDateChanged();
+  }, 5 * 60 * 1000);
 
   refreshAll();
 }
