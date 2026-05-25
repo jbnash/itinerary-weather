@@ -49,6 +49,19 @@
     background: var(--accent); animation: pulse 1s infinite ease-in-out;
   }
   @keyframes pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+  .fx {
+    margin-top: 4px; font-size: 11px; color: var(--muted);
+    display: flex; gap: 9px; flex-wrap: wrap; align-items: baseline;
+    font-variant-numeric: tabular-nums;
+  }
+  .fx .fx-base { color: var(--dim); }
+  .fx .fx-pair em { color: var(--ink); font-style: normal; font-weight: 500; }
+  .fx .fx-pair .code { color: var(--dim); font-size: 10px; margin-left: 2px; letter-spacing: 0.04em; }
+  .uv-low     { color: #88c97c; }
+  .uv-mod     { color: #f5d76e; }
+  .uv-high    { color: #f5a16e; }
+  .uv-vhigh   { color: #f56e6e; }
+  .uv-extreme { color: #c97cbe; }
   main {
     max-width: 1400px;
     margin: 0 auto;
@@ -186,6 +199,7 @@
   <h1>Cruise Weather — Northern Europe</h1>
   <div class="sub">13 Jun – 11 Jul 2026 · Rotterdam → Norway → UK → Baltic → Rotterdam</div>
   <div class="updated" id="updated"></div>
+  <div class="fx" id="fx"></div>
 </header>
 <main id="grid"></main>
 <footer>
@@ -304,6 +318,85 @@ const PLATFORMS = [
   { name: 'Anholt',          op: 'Ørsted',         lat: 56.60, lon: 11.21, type: 'wind' },
   { name: 'Kriegers Flak',   op: 'Vattenfall',     lat: 55.00, lon: 13.10, type: 'wind' },
   { name: 'Borssele',        op: 'Ørsted',         lat: 51.70, lon: 3.00,  type: 'wind' },
+];
+
+// Notable lighthouses along the cruise route — pre-fetched from OSM Overpass and filtered to
+// major lights, named historic, or those with a Wikipedia entry. Static so we don't hammer Overpass.
+const LIGHTHOUSES = [
+  {"n":"Admiralty Pier Lighthouse","lat":51.1114,"lon":1.3277},
+  {"n":"West Head Light","lat":51.1131,"lon":1.33},
+  {"n":"Prince of Wales Pier Lighthouse","lat":51.1141,"lon":1.323},
+  {"n":"Knuckle Light","lat":51.1174,"lon":1.3415},
+  {"n":"Dovercourt Low Lighthouse","lat":51.9301,"lon":1.2781},
+  {"n":"Dovercourt High Lighthouse","lat":51.9304,"lon":1.2754},
+  {"n":"Europoort Hoog","lat":51.9574,"lon":4.1523},
+  {"n":"Europoort Laag","lat":51.9595,"lon":4.1451},
+  {"n":"Nieuwe Waterweg Hoog","lat":51.9747,"lon":4.1318},
+  {"n":"Hoge vuurtoren van IJmuiden","lat":52.4608,"lon":4.5827},
+  {"n":"Lage vuurtoren van IJmuiden","lat":52.4618,"lon":4.5745},
+  {"n":"Petersdorf Oberfeuer","lat":54.131,"lon":12.121},
+  {"n":"Drogden Fyr","lat":55.5364,"lon":12.7116},
+  {"n":"Songvår fyr","lat":58.015,"lon":7.8098},
+  {"n":"Oksøy fyr","lat":58.0723,"lon":8.0528},
+  {"n":"Grønningen fyr","lat":58.0814,"lon":8.0879},
+  {"n":"Odderøya Fyr","lat":58.1314,"lon":8.0022},
+  {"n":"Merise tulepaak","lat":58.4978,"lon":22.1382},
+  {"n":"Saaremaa sadama kai tulepaak","lat":58.537,"lon":22.2373},
+  {"n":"Panga tulepaak","lat":58.5695,"lon":22.2877},
+  {"n":"Emmaste sihi alumine tuletorn","lat":58.6908,"lon":22.5536},
+  {"n":"Sõru sihi ülemine tuletorn","lat":58.7039,"lon":22.4859},
+  {"n":"Geitungen fyr","lat":59.1315,"lon":5.2427},
+  {"n":"Madise sihi alumine tulepaak","lat":59.2942,"lon":24.1159},
+  {"n":"Blockhusudden","lat":59.3208,"lon":18.1549},
+  {"n":"Paldiski Lõunasadama sihi ülemine tulepaak","lat":59.3319,"lon":24.0983},
+  {"n":"Libertus","lat":59.3323,"lon":18.1764},
+  {"n":"Kungshamn","lat":59.3346,"lon":18.2092},
+  {"n":"Lagnögrund","lat":59.3586,"lon":18.4151},
+  {"n":"Södernäs","lat":59.3618,"lon":18.4523},
+  {"n":"Värmdö-Garpen","lat":59.3629,"lon":18.3764},
+  {"n":"Elfsviksgrund","lat":59.364,"lon":18.259},
+  {"n":"Lilla Höggarnsbank","lat":59.3656,"lon":18.2687},
+  {"n":"Björnsgrund","lat":59.3665,"lon":18.3105},
+  {"n":"Tynningö","lat":59.3714,"lon":18.3892},
+  {"n":"Furuholmen","lat":59.3717,"lon":18.3353},
+  {"n":"Stora Höggarnsbank","lat":59.3741,"lon":18.2797},
+  {"n":"Granholmen","lat":59.3777,"lon":18.2945},
+  {"n":"Bogesund","lat":59.3808,"lon":18.304},
+  {"n":"Sandgrundet","lat":59.3959,"lon":18.3619},
+  {"n":"Djursholmsudde","lat":59.396,"lon":18.1025},
+  {"n":"Stora Berteln","lat":59.4253,"lon":18.4114},
+  {"n":"Västra Rönnholmen","lat":59.4276,"lon":18.3657},
+  {"n":"Tisterögrund","lat":59.431,"lon":18.3916},
+  {"n":"Bjurögrund","lat":59.4428,"lon":18.4399},
+  {"n":"Östra Älgögrund","lat":59.4454,"lon":18.4163},
+  {"n":"Lerviksudde","lat":59.4532,"lon":18.3875},
+  {"n":"Mjölkö","lat":59.4566,"lon":18.4276},
+  {"n":"Paljassaare sihi ülemine tulepaak","lat":59.4567,"lon":24.6992},
+  {"n":"Paljassaare sihi alumine tulepaak","lat":59.4574,"lon":24.7028},
+  {"n":"Pirita lõunamuuli tulepaak","lat":59.4701,"lon":24.8175},
+  {"n":"Kallavere sihi ülemine tulepaak","lat":59.4906,"lon":25.0239},
+  {"n":"Vahemadala tuletorn","lat":59.5102,"lon":24.6662},
+  {"n":"Viimsi sihi alumine tulepaak","lat":59.5154,"lon":24.8156},
+  {"n":"Ihasalu päevamärk","lat":59.5406,"lon":25.1425},
+  {"n":"Karbimadala tuletorn","lat":59.55,"lon":24.971},
+  {"n":"Naissaare sadama tulepaak","lat":59.5558,"lon":24.5508},
+  {"n":"Aegna tulepaak","lat":59.6006,"lon":24.7297},
+  {"n":"Kavringen fyr","lat":59.8998,"lon":10.722},
+  {"n":"Helsingin majakka","lat":59.949,"lon":24.9264},
+  {"n":"Mousa Light Station","lat":59.9971,"lon":-1.1577},
+  {"n":"Halliluoto","lat":60.0362,"lon":24.8905},
+  {"n":"Fugla Ness Lighthouse","lat":60.1064,"lon":-1.3475},
+  {"n":"Tiirakari","lat":60.1283,"lon":24.9269},
+  {"n":"Reimarisaari","lat":60.1312,"lon":24.994},
+  {"n":"Länsi Mustasaari","lat":60.1463,"lon":24.9741},
+  {"n":"Ram's Head Lighthouse","lat":60.1993,"lon":-1.5577},
+  {"n":"Hendanes fyr","lat":61.9647,"lon":5.0341},
+  {"n":"Skongsneset fyr","lat":62.0325,"lon":5.1238},
+  {"n":"Kråkenes fyr","lat":62.0348,"lon":4.9856},
+  {"n":"Kjeungskjæret fyr","lat":63.7268,"lon":9.531},
+  {"n":"Nordøyan fyr","lat":64.7985,"lon":10.5476},
+  {"n":"Moholmen fyr","lat":68.1576,"lon":14.4058},
+  {"n":"Torsvåg fyr","lat":70.2455,"lon":19.4999},
 ];
 
 const WMO = {
@@ -428,6 +521,19 @@ function fmtAge(dateStr) {
   return `${Math.round(days/30)}mo ago`;
 }
 
+function lighthousesNear(coords, maxKm) {
+  const out = [];
+  for (const lh of LIGHTHOUSES) {
+    let minKm = Infinity;
+    for (const [lat, lon] of coords) {
+      const d = haversineKm(lh.lat, lh.lon, lat, lon);
+      if (d < minKm) minKm = d;
+    }
+    if (minKm <= maxKm) out.push({ ...lh, distKm: minKm, distMi: Math.round(kmToMi(minKm)) });
+  }
+  return out.sort((a,b) => a.distKm - b.distKm).slice(0, 3);
+}
+
 function platformsNear(coords, maxKm) {
   const out = [];
   for (const plat of PLATFORMS) {
@@ -444,8 +550,8 @@ function platformsNear(coords, maxKm) {
 async function fetchForecast(p, withHourly = false) {
   const hourly = withHourly ? '&hourly=temperature_2m,weather_code,precipitation_probability,wind_speed_10m' : '';
   const u = `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}` +
-    `&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m` +
-    `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max` +
+    `&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m,uv_index` +
+    `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max` +
     hourly +
     `&timezone=auto&forecast_days=16&wind_speed_unit=mph&temperature_unit=fahrenheit`;
   const r = await fetch(u);
@@ -458,7 +564,7 @@ async function fetchForecastMulti(coords) {
   const lats = coords.map(c => c[0]).join(',');
   const lons = coords.map(c => c[1]).join(',');
   const u = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}` +
-    `&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,precipitation_probability_max` +
+    `&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,precipitation_probability_max,uv_index_max` +
     `&timezone=auto&forecast_days=16&wind_speed_unit=mph&temperature_unit=fahrenheit`;
   const r = await fetch(u);
   if (!r.ok) throw new Error('route weather failed');
@@ -553,6 +659,18 @@ function tempPair(hi, lo) {
     : `${numStr(toC(hi), '°C')}`;
   return { f: fLine, c: cLine };
 }
+function uvBadge(uv) {
+  if (uv == null) return '';
+  const v = Math.round(uv);
+  let cls, label;
+  if (uv < 3)       { cls = 'uv-low';     label = 'Low'; }
+  else if (uv < 6)  { cls = 'uv-mod';     label = 'Moderate'; }
+  else if (uv < 8)  { cls = 'uv-high';    label = 'High'; }
+  else if (uv < 11) { cls = 'uv-vhigh';   label = 'Very high'; }
+  else              { cls = 'uv-extreme'; label = 'Extreme'; }
+  return `<span class="${cls}">☀ UV ${v} ${label}</span>`;
+}
+
 const seaState = ft => {
   if (ft == null) return '';
   if (ft < 1) return 'Calm';
@@ -638,6 +756,13 @@ function discoveriesHTML(p, wildlife, isSeaDay = false) {
     lines.push(`<div class="disc-line"><span class="disc-icon">📍</span><span class="disc-body">${list}</span></div>`);
   }
 
+  // 2b. Lighthouses near port/coast
+  const lhs = lighthousesNear(coords, isSeaDay ? 30 : 15);
+  if (lhs.length) {
+    const list = lhs.map(l => `<em>${l.n}</em> <span class="dim">${l.distMi}mi</span>`).join(' · ');
+    lines.push(`<div class="disc-line"><span class="disc-icon">🗼</span><span class="disc-body">${list}</span></div>`);
+  }
+
   // 3. Curated "what to look for"
   const lookFor = LOOK_FOR[p.d];
   if (lookFor) {
@@ -691,6 +816,8 @@ function renderForecast(card, p, data, marine, isNext, wildlife) {
     const d0 = days[0];
     const [dIcon, dLabel] = wmo(d0.code);
     const tp = tempPair(d0.hi, d0.lo);
+    const d0Uv = data.daily.uv_index_max?.[portDateIdx >= 0 ? portDateIdx : 0];
+    const uv = uvBadge(d0Uv);
     curHTML = `
       <div class="current">
         <div class="icon">${dIcon}</div>
@@ -698,11 +825,12 @@ function renderForecast(card, p, data, marine, isNext, wildlife) {
           <div class="temp">${tp.f}</div>
           <div class="temp-c">${tp.c}</div>
           <div class="cond">${dLabel}${d0.pop != null ? ` · ${d0.pop}% precip` : ''}</div>
-          ${wave ? `<div class="meta">${wave}</div>` : ''}
+          ${(wave || uv) ? `<div class="meta">${uv}${wave}</div>` : ''}
         </div>
       </div>`;
   } else {
     const tp = tempPair(cur.temperature_2m);
+    const uv = uvBadge(cur.uv_index);
     curHTML = `
       <div class="current">
         <div class="icon">${curIcon}</div>
@@ -713,6 +841,7 @@ function renderForecast(card, p, data, marine, isNext, wildlife) {
           <div class="meta">
             <span>💨 ${Math.round(cur.wind_speed_10m)} mph</span>
             <span>💧 ${cur.relative_humidity_2m}%</span>
+            ${uv}
             ${wave}
           </div>
         </div>
@@ -810,7 +939,7 @@ function renderNormal(card, p, wildlife) {
 }
 
 function aggregateRoute(arr, dateISO) {
-  const codes = [], his = [], los = [], pops = [], winds = [];
+  const codes = [], his = [], los = [], pops = [], winds = [], uvs = [];
   arr.forEach(d => {
     const idx = d?.daily?.time?.indexOf(dateISO);
     if (idx == null || idx < 0) return;
@@ -819,6 +948,8 @@ function aggregateRoute(arr, dateISO) {
     los.push(d.daily.temperature_2m_min[idx]);
     pops.push(d.daily.precipitation_probability_max?.[idx] ?? 0);
     winds.push(d.daily.wind_speed_10m_max?.[idx] ?? 0);
+    const uv = d.daily.uv_index_max?.[idx];
+    if (uv != null) uvs.push(uv);
   });
   if (!codes.length) return null;
   // Pick the most common weather code as representative; track if any waypoint is markedly worse.
@@ -832,6 +963,7 @@ function aggregateRoute(arr, dateISO) {
     lo: { min: Math.min(...los), max: Math.max(...los) },
     pop: Math.max(...pops),
     wind: { min: Math.min(...winds), max: Math.max(...winds) },
+    uv: uvs.length ? Math.max(...uvs) : null,
   };
 }
 
@@ -867,6 +999,7 @@ function renderSeaRoute(card, p, route, agg, marineAgg, data0, wildlife) {
   const w = card.querySelector('.weather');
   const [icon, label] = wmo(agg.code);
   const tp = tempPair(agg.hi, agg.lo);
+  const uv = uvBadge(agg.uv);
   const wave = marineAgg
     ? `<span class="wave">🌊 ${fmtWaveRange(marineAgg)} · ${seaState(mToFt(marineAgg.maxM))}${marineAgg.avgPeriod ? ' · ' + Math.round(marineAgg.avgPeriod) + 's between crests' : ''}</span>`
     : '';
@@ -903,6 +1036,7 @@ function renderSeaRoute(card, p, route, agg, marineAgg, data0, wildlife) {
         <div class="cond">${label} · ${agg.pop}% precip</div>
         <div class="meta">
           <span>💨 ${fmtRange(agg.wind, '')} mph</span>
+          ${uv}
           ${wave}
         </div>
       </div>
@@ -929,6 +1063,7 @@ function renderSea(card, p, data, marine, wildlife) {
   const hi = data.daily.temperature_2m_max[idx];
   const lo = data.daily.temperature_2m_min[idx];
   const tp = tempPair(hi, lo);
+  const uv = uvBadge(data.daily.uv_index_max?.[idx]);
   w.innerHTML = `
     <div class="current">
       <div class="icon">${icon}</div>
@@ -936,7 +1071,7 @@ function renderSea(card, p, data, marine, wildlife) {
         <div class="temp">${tp.f}</div>
         <div class="temp-c">${tp.c}</div>
         <div class="cond">${label} · open water</div>
-        ${wave ? `<div class="meta">${wave}</div>` : ''}
+        ${(wave || uv) ? `<div class="meta">${uv}${wave}</div>` : ''}
       </div>
     </div>
     ${sunHTML(p)}
@@ -1000,6 +1135,33 @@ async function loadWeatherFor(p, card, idx, isNext) {
   }
 }
 
+// Currency rates from Frankfurter (ECB data) — no key, no limits. Updated daily.
+let FX_RATES = null;
+let FX_FETCH_AT = 0;
+const FX_STALE_MS = 6 * 60 * 60 * 1000;  // re-fetch at most every 6 hours; daily update anyway
+async function fetchCurrency() {
+  if (FX_RATES && Date.now() - FX_FETCH_AT < FX_STALE_MS) return;
+  try {
+    const r = await fetch('https://api.frankfurter.app/latest?base=USD&symbols=EUR,GBP,NOK,DKK,SEK');
+    if (!r.ok) return;
+    const j = await r.json();
+    FX_RATES = { rates: j.rates, date: j.date };
+    FX_FETCH_AT = Date.now();
+  } catch {}
+}
+function renderFx() {
+  const el = document.getElementById('fx');
+  if (!el) return;
+  if (!FX_RATES) { el.innerHTML = ''; return; }
+  const order = ['EUR', 'GBP', 'NOK', 'DKK', 'SEK'];
+  const parts = order.filter(k => FX_RATES.rates[k] != null).map(k => {
+    const v = FX_RATES.rates[k];
+    const disp = v < 5 ? v.toFixed(2) : v.toFixed(1);
+    return `<span class="fx-pair"><em>${disp}</em><span class="code">${k}</span></span>`;
+  });
+  el.innerHTML = `<span class="fx-base">$1 =</span> ${parts.join(' · ')}`;
+}
+
 // Wildlife is fetched separately from weather — much slower-changing, less critical to refresh.
 async function loadAllWildlife() {
   await Promise.all(PORTS.map(async (p, i) => {
@@ -1028,6 +1190,9 @@ async function refreshAll(force = false) {
     if (force || wildlifeStale) {
       await loadAllWildlife();
     }
+    // Currency rates also fetched here (cheap, daily-updated upstream).
+    await fetchCurrency();
+    renderFx();
     await Promise.all(PORTS.map((p, i) => loadWeatherFor(p, CARDS[i], i, i === NEXT_IDX)));
     LAST_FETCH = Date.now();
     stamp.textContent = `Updated ${new Date().toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' })} · tap to refresh`;
