@@ -185,6 +185,12 @@
   .disc-line .disc-body { flex: 1; }
   .disc-line em { color: var(--ink); font-style: normal; font-weight: 500; }
   .disc-line .dim { color: var(--dim); font-size: 10.5px; }
+  .disc-line a { text-decoration: none; }
+  .disc-line a em { text-decoration: none; }
+  .disc-line a:hover em, .disc-line a:hover { text-decoration: underline; }
+  .disc-line .bird-recent { color: var(--ink); font-weight: 500; }
+  .disc-line .bird-notable { color: #ffd479; font-weight: 600; }
+  .disc-line .bird-notable:hover, .disc-line .bird-recent:hover { text-decoration: underline; }
   .placeholder { color: var(--muted); font-size: 11px; font-style: italic; padding: 4px 0; text-align: center; }
   .err { color: #ff9a9a; font-size: 11px; }
   footer { max-width: 1400px; margin: 0 auto; padding: 0 calc(16px + env(safe-area-inset-right)) calc(30px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); color: var(--dim); font-size: 10.5px; }
@@ -585,13 +591,11 @@ async function fetchMarineMulti(coords) {
   } catch { return null; }
 }
 
-// iNaturalist API — recent sightings near a point, across multiple charm-forward taxa.
+// iNaturalist API — marine mammals only. Birds handled separately via eBird (much richer data).
 // Free, no key, CORS-enabled. Data is naturally in-season (filtered to last 30 days).
 //   152871 = Cetacea (whales, dolphins, porpoises)
 //   41603  = Pinnipedia (seals, walruses)
-//   4380   = Alcidae (puffins, razorbills, guillemots)
-//   5301   = Accipitridae (eagles, hawks — sea eagles especially)
-const WILDLIFE_TAXA = '152871,41603,4380,5301';
+const WILDLIFE_TAXA = '152871,41603';
 async function fetchWildlife(lat, lon, radiusKm = 50, days = 30) {
   const since = new Date(Date.now() - days * 86400000).toISOString().slice(0,10);
   const u = `https://api.inaturalist.org/v1/observations?taxon_id=${WILDLIFE_TAXA}` +
@@ -606,20 +610,63 @@ async function fetchWildlife(lat, lon, radiusKm = 50, days = 30) {
   } catch { return []; }
 }
 
-// Collapse multiple observations to one entry per species, keeping the most recent.
+// Collapse multiple observations to one entry per species, keeping the most recent + taxon id for linking.
 function dedupeWildlife(observations, queryLat, queryLon) {
   const bySpecies = {};
   for (const obs of observations) {
-    const name = obs.taxon?.preferred_common_name || obs.taxon?.name || 'Cetacean';
+    const name = obs.taxon?.preferred_common_name || obs.taxon?.name || 'Marine mammal';
+    const taxonId = obs.taxon?.id;
     const date = obs.observed_on;
     if (!date) continue;
     if (!bySpecies[name] || date > bySpecies[name].date) {
       const coords = obs.geojson?.coordinates;
       const distMi = coords ? Math.round(kmToMi(haversineKm(queryLat, queryLon, coords[1], coords[0]))) : null;
-      bySpecies[name] = { name, date, distMi };
+      bySpecies[name] = { name, date, distMi, taxonId };
     }
   }
   return Object.values(bySpecies).sort((a,b) => b.date.localeCompare(a.date));
+}
+
+// eBird API — recent + notable bird sightings near a point. Free key required; passed in header.
+// 50km is eBird's max radius; 14 days back default.
+const EBIRD_KEY = 'skbb23vrikvl';
+async function fetchEbird(path, lat, lon, daysBack = 14, dist = 50) {
+  const u = `https://api.ebird.org/v2/data/obs/geo/${path}?lat=${lat.toFixed(2)}&lng=${lon.toFixed(2)}&dist=${dist}&back=${daysBack}&maxResults=200`;
+  try {
+    const r = await fetch(u, { headers: { 'X-eBirdApiToken': EBIRD_KEY } });
+    if (!r.ok) return [];
+    return r.json();
+  } catch { return []; }
+}
+async function fetchBirds(lat, lon) {
+  const [recent, notable] = await Promise.all([
+    fetchEbird('recent', lat, lon),
+    fetchEbird('recent/notable', lat, lon),
+  ]);
+  const bySpec = {};
+  for (const o of recent) {
+    if (!o.speciesCode || !o.comName) continue;
+    if (!bySpec[o.speciesCode]) {
+      bySpec[o.speciesCode] = { code: o.speciesCode, name: o.comName, date: o.obsDt, notable: false,
+        distMi: Math.round(kmToMi(haversineKm(lat, lon, o.lat, o.lng))) };
+    } else if (o.obsDt > bySpec[o.speciesCode].date) {
+      bySpec[o.speciesCode].date = o.obsDt;
+    }
+  }
+  for (const o of notable) {
+    if (!o.speciesCode || !o.comName) continue;
+    if (!bySpec[o.speciesCode]) {
+      bySpec[o.speciesCode] = { code: o.speciesCode, name: o.comName, date: o.obsDt, notable: true,
+        distMi: Math.round(kmToMi(haversineKm(lat, lon, o.lat, o.lng))) };
+    } else {
+      bySpec[o.speciesCode].notable = true;
+    }
+  }
+  // Notable first, then by recency.
+  return Object.values(bySpec).sort((a, b) => {
+    if (a.notable !== b.notable) return a.notable ? -1 : 1;
+    return (b.date || '').localeCompare(a.date || '');
+  });
 }
 
 async function fetchMarine(p) {
@@ -732,16 +779,36 @@ function sunHTML(p) {
   return `<div class="sun"><span>☀️↑ ${s.sunrise}</span><span>☀️↓ ${s.sunset}</span><span>${fmtDuration(s.daylightHours)} daylight</span></div>`;
 }
 
-function discoveriesHTML(p, wildlife, isSeaDay = false) {
+function discoveriesHTML(p, wildlife, birds, isSeaDay = false) {
   const lines = [];
 
-  // 1. Wildlife (live from iNaturalist, last 30 days nearby — naturally in-season)
+  // 1a. Marine mammals (iNaturalist, last 30 days)
   if (wildlife && wildlife.length) {
     const top = wildlife.slice(0, 4);
-    const list = top.map(w => `<em>${w.name}</em> <span class="dim">(${fmtAge(w.date)}${w.distMi != null ? `, ${w.distMi}mi` : ''})</span>`).join(' · ');
-    lines.push(`<div class="disc-line"><span class="disc-icon">🔭</span><span class="disc-body">${list}</span></div>`);
+    const list = top.map(w => {
+      const inner = `<em>${w.name}</em>`;
+      const linked = w.taxonId
+        ? `<a href="https://www.inaturalist.org/taxa/${w.taxonId}" target="_blank" rel="noopener">${inner}</a>`
+        : inner;
+      return `${linked} <span class="dim">(${fmtAge(w.date)}${w.distMi != null ? `, ${w.distMi}mi` : ''})</span>`;
+    }).join(' · ');
+    lines.push(`<div class="disc-line"><span class="disc-icon">🐋</span><span class="disc-body">${list}</span></div>`);
   } else if (wildlife != null) {
-    lines.push(`<div class="disc-line"><span class="disc-icon">🔭</span><span class="disc-body dim">No recent sightings logged here</span></div>`);
+    lines.push(`<div class="disc-line"><span class="disc-icon">🐋</span><span class="disc-body dim">No recent marine mammal sightings here</span></div>`);
+  }
+
+  // 1b. Birds (eBird, recent + notable; notable highlighted with ✨)
+  if (birds && birds.length) {
+    const top = birds.slice(0, 6);
+    const list = top.map(b => {
+      const url = `https://ebird.org/species/${b.code}`;
+      const cls = b.notable ? 'bird-notable' : 'bird-recent';
+      const prefix = b.notable ? '✨' : '';
+      return `<a class="${cls}" href="${url}" target="_blank" rel="noopener">${prefix}${b.name}</a>`;
+    }).join(' · ');
+    lines.push(`<div class="disc-line"><span class="disc-icon">🐦</span><span class="disc-body">${list}</span></div>`);
+  } else if (birds != null) {
+    lines.push(`<div class="disc-line"><span class="disc-icon">🐦</span><span class="disc-body dim">No recent bird sightings nearby</span></div>`);
   }
 
   // 2. Offshore installations near route/port
@@ -788,7 +855,7 @@ function waveLineHTML(marine, dateISO) {
   return `<span class="wave">🌊 ${ft.toFixed(1)} ft${state ? ' · ' + state : ''}${perS ? ' · ' + Math.round(perS) + 's between crests' : ''}</span>`;
 }
 
-function renderForecast(card, p, data, marine, isNext, wildlife) {
+function renderForecast(card, p, data, marine, isNext, wildlife, birds) {
   const w = card.querySelector('.weather');
   const portDateIdx = data?.daily?.time?.indexOf(p.d) ?? -1;
   const startIdx = portDateIdx >= 0 ? portDateIdx : 0;
@@ -860,7 +927,7 @@ function renderForecast(card, p, data, marine, isNext, wildlife) {
     </div>`;
 
   const hourlyHTML = isNext ? renderHourlyHTML(p, data) : '';
-  const discHTML = discoveriesHTML(p, wildlife, false);
+  const discHTML = discoveriesHTML(p, wildlife, birds, false);
 
   w.innerHTML = curHTML + sunHTML(p) + stripHTML + discHTML + hourlyHTML;
 }
@@ -911,7 +978,7 @@ function renderHourlyHTML(p, data) {
     </div>`;
 }
 
-function renderNormal(card, p, wildlife) {
+function renderNormal(card, p, wildlife, birds) {
   const n = NORMALS[p.name];
   const w = card.querySelector('.weather');
   const du = daysUntil(p.d);
@@ -931,7 +998,7 @@ function renderNormal(card, p, wildlife) {
     </div>
     ${sunHTML(p)}
     <div class="placeholder">Typical ${new Date(p.d+'T00:00:00').toLocaleDateString(undefined,{month:'long'})} conditions. Live forecast unlocks in ~${du - FORECAST_HORIZON + 1}d.</div>
-    ${discoveriesHTML(p, wildlife, p.sea)}
+    ${discoveriesHTML(p, wildlife, birds, p.sea)}
   `;
 }
 
@@ -992,7 +1059,7 @@ const fmtWaveRange = (m) => {
   return hi - lo < 0.5 ? `${hi.toFixed(1)} ft` : `${lo.toFixed(1)}–${hi.toFixed(1)} ft`;
 };
 
-function renderSeaRoute(card, p, route, agg, marineAgg, data0, wildlife) {
+function renderSeaRoute(card, p, route, agg, marineAgg, data0, wildlife, birds) {
   const w = card.querySelector('.weather');
   const [icon, label] = wmo(agg.code);
   const tp = tempPair(agg.hi, agg.lo);
@@ -1040,20 +1107,20 @@ function renderSeaRoute(card, p, route, agg, marineAgg, data0, wildlife) {
     </div>
     ${sunHTML(p)}
     ${stripHTML}
-    ${discoveriesHTML(p, wildlife, true)}
+    ${discoveriesHTML(p, wildlife, birds, true)}
   `;
 }
 
-function renderSea(card, p, data, marine, wildlife) {
+function renderSea(card, p, data, marine, wildlife, birds) {
   const w = card.querySelector('.weather');
   const wave = waveLineHTML(marine, p.d);
   if (!data) {
-    w.innerHTML = `<div class="placeholder">Cruising at sea.</div>${wave ? `<div class="meta" style="justify-content:center">${wave}</div>` : ''}${sunHTML(p)}${discoveriesHTML(p, wildlife, true)}`;
+    w.innerHTML = `<div class="placeholder">Cruising at sea.</div>${wave ? `<div class="meta" style="justify-content:center">${wave}</div>` : ''}${sunHTML(p)}${discoveriesHTML(p, wildlife, birds, true)}`;
     return;
   }
   const idx = data?.daily?.time?.indexOf(p.d) ?? -1;
   if (idx < 0) {
-    w.innerHTML = `<div class="placeholder">Cruising at sea.</div>${sunHTML(p)}${discoveriesHTML(p, wildlife, true)}`;
+    w.innerHTML = `<div class="placeholder">Cruising at sea.</div>${sunHTML(p)}${discoveriesHTML(p, wildlife, birds, true)}`;
     return;
   }
   const [icon, label] = wmo(data.daily.weather_code[idx]);
@@ -1072,7 +1139,7 @@ function renderSea(card, p, data, marine, wildlife) {
       </div>
     </div>
     ${sunHTML(p)}
-    ${discoveriesHTML(p, wildlife, true)}
+    ${discoveriesHTML(p, wildlife, birds, true)}
   `;
 }
 
@@ -1081,7 +1148,8 @@ let NEXT_IDX = -1;
 let LAST_FETCH = 0;
 let LAST_WILDLIFE_FETCH = 0;
 let FETCHING = false;
-const WILDLIFE = new Array(PORTS.length).fill(null);  // dedupedWildlife[] per port, indexed
+const WILDLIFE = new Array(PORTS.length).fill(null);  // marine mammals per port (iNaturalist)
+const BIRDS = new Array(PORTS.length).fill(null);     // birds per port (eBird, recent + notable)
 const STALE_MS = 5 * 60 * 1000;          // re-fetch weather if older than this on visibility change
 const REFRESH_MS = 15 * 60 * 1000;       // foreground periodic refresh (weather only)
 const WILDLIFE_STALE_MS = 60 * 60 * 1000; // wildlife cached for 1 hour — it changes slowly
@@ -1089,6 +1157,7 @@ const WILDLIFE_STALE_MS = 60 * 60 * 1000; // wildlife cached for 1 hour — it c
 async function loadWeatherFor(p, card, idx, isNext) {
   const du = daysUntil(p.d);
   const wildlife = WILDLIFE[idx];
+  const birds = BIRDS[idx];
   try {
     if (p.sea) {
       const route = ROUTES[p.d];
@@ -1099,16 +1168,16 @@ async function loadWeatherFor(p, card, idx, isNext) {
         ]);
         const agg = aggregateRoute(routeArr, p.d);
         const marineAgg = aggregateMarineRoute(marineArr, p.d);
-        if (agg) renderSeaRoute(card, p, route, agg, marineAgg, routeArr[0], wildlife);
-        else renderSea(card, p, null, null, wildlife);
+        if (agg) renderSeaRoute(card, p, route, agg, marineAgg, routeArr[0], wildlife, birds);
+        else renderSea(card, p, null, null, wildlife, birds);
       } else if (du >= 0 && du < FORECAST_HORIZON) {
         const [data, marine] = await Promise.all([
           fetchForecast(p, false),
           du < MARINE_HORIZON ? fetchMarine(p) : Promise.resolve(null),
         ]);
-        renderSea(card, p, data, marine, wildlife);
+        renderSea(card, p, data, marine, wildlife, birds);
       } else {
-        renderSea(card, p, null, null, wildlife);
+        renderSea(card, p, null, null, wildlife, birds);
         if (route) {
           const w = card.querySelector('.weather');
           w.insertAdjacentHTML('afterbegin',
@@ -1117,15 +1186,15 @@ async function loadWeatherFor(p, card, idx, isNext) {
       }
       return;
     }
-    if (du < 0) { renderNormal(card, p, wildlife); return; }
+    if (du < 0) { renderNormal(card, p, wildlife, birds); return; }
     if (du < FORECAST_HORIZON) {
       const [data, marine] = await Promise.all([
         fetchForecast(p, isNext),
         du < MARINE_HORIZON ? fetchMarine(p) : Promise.resolve(null),
       ]);
-      renderForecast(card, p, data, marine, isNext, wildlife);
+      renderForecast(card, p, data, marine, isNext, wildlife, birds);
     } else {
-      renderNormal(card, p, wildlife);
+      renderNormal(card, p, wildlife, birds);
     }
   } catch (e) {
     card.querySelector('.weather').innerHTML = `<div class="err">Couldn't load weather — ${e.message}</div>${sunHTML(p)}`;
@@ -1159,7 +1228,7 @@ function renderFx() {
   el.innerHTML = `<span class="fx-base">$1 =</span> ${parts.join(' · ')}`;
 }
 
-// Wildlife is fetched separately from weather — much slower-changing, less critical to refresh.
+// Wildlife (iNat mammals) + birds (eBird) — both slow-changing, fetched on a longer cadence than weather.
 async function loadAllWildlife() {
   await Promise.all(PORTS.map(async (p, i) => {
     // Use route midpoint for sea days, port location otherwise
@@ -1169,8 +1238,12 @@ async function loadAllWildlife() {
       const mid = route.course[Math.floor(route.course.length / 2)];
       lat = mid[0]; lon = mid[1];
     }
-    const obs = await fetchWildlife(lat, lon, 50, 30);
+    const [obs, birds] = await Promise.all([
+      fetchWildlife(lat, lon, 50, 30),
+      fetchBirds(lat, lon),
+    ]);
     WILDLIFE[i] = dedupeWildlife(obs, lat, lon);
+    BIRDS[i] = birds;
   }));
   LAST_WILDLIFE_FETCH = Date.now();
 }
