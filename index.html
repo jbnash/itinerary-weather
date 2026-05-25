@@ -138,6 +138,11 @@
   .hr .h-icon { font-size: 13px; }
   .hr .h-t { color: var(--ink); font-weight: 600; font-size: 10.5px; }
   .hr .h-p { color: var(--lo); font-size: 9.5px; }
+  .route-line {
+    font-size: 11px; color: var(--muted); padding: 0 2px;
+    display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline;
+  }
+  .route-line .waters { color: var(--dim); font-size: 10.5px; }
   .placeholder { color: var(--muted); font-size: 11px; font-style: italic; padding: 4px 0; text-align: center; }
   .err { color: #ff9a9a; font-size: 11px; }
   footer { max-width: 1400px; margin: 0 auto; padding: 0 16px 30px; color: var(--dim); font-size: 10.5px; }
@@ -190,6 +195,29 @@ const PORTS = [
   { d: '2026-07-10', name: 'Dover (London)',   country: 'England, UK',         lat: 51.1279, lon: 1.3134,   tz: 'Europe/London',    arr: '4:30 AM', dep: '6:00 PM' },
   { d: '2026-07-11', name: 'Rotterdam (Debark)', country: 'Netherlands',       lat: 51.9225, lon: 4.4792,   tz: 'Europe/Amsterdam', arr: '7:00 AM', dep: '—' },
 ];
+
+// Approximate course for each sea day — 4-5 waypoints from previous-day departure to next-day arrival.
+// Used to sample weather + sea state at multiple points and aggregate, rather than a single fake midpoint.
+const ROUTES = {
+  '2026-06-14': { label: 'Rotterdam → Eidfjord',     waters: 'North Sea → Norwegian coast',
+    course: [[52.5, 4.5], [54.5, 4.0], [57.0, 3.5], [59.0, 5.0], [60.3, 5.5]] },
+  '2026-06-18': { label: 'Trondheim → Leknes',       waters: 'Norwegian coast',
+    course: [[63.6, 9.5], [65.0, 10.5], [67.0, 12.0], [68.0, 13.5]] },
+  '2026-06-22': { label: 'Honningsvåg → Lerwick',    waters: 'Off North Cape, southbound',
+    course: [[71.2, 25.0], [70.7, 22.0], [70.2, 19.0], [69.0, 16.0]] },
+  '2026-06-23': { label: 'Honningsvåg → Lerwick',    waters: 'Norwegian Sea crossing',
+    course: [[68.0, 14.0], [66.0, 10.0], [64.0, 5.0], [62.0, 0.5]] },
+  '2026-06-25': { label: 'Lerwick → Dover',          waters: 'North Sea, southbound',
+    course: [[59.5, -0.5], [57.0, 1.0], [54.0, 2.0], [52.0, 1.5]] },
+  '2026-06-28': { label: 'Rotterdam → Copenhagen',   waters: 'North Sea / Skagerrak',
+    course: [[52.5, 4.5], [55.5, 7.0], [57.5, 9.0], [56.5, 11.0], [55.7, 12.5]] },
+  '2026-07-02': { label: 'Warnemünde → Tallinn',     waters: 'Baltic Sea, eastbound',
+    course: [[54.8, 12.5], [55.5, 16.0], [56.5, 20.0], [58.5, 22.5], [59.4, 24.5]] },
+  '2026-07-07': { label: 'Visby → Oslo',             waters: 'Baltic / Kattegat',
+    course: [[57.5, 18.0], [56.0, 14.0], [56.5, 11.5], [58.0, 10.8], [59.5, 10.7]] },
+  '2026-07-09': { label: 'Oslo → Dover',             waters: 'Skagerrak / North Sea',
+    course: [[59.5, 10.5], [58.0, 8.0], [55.5, 4.5], [53.5, 3.0], [52.0, 2.0]] },
+};
 
 const WMO = {
   0:['☀️','Clear'], 1:['🌤️','Mostly clear'], 2:['⛅','Partly cloudy'], 3:['☁️','Overcast'],
@@ -306,6 +334,32 @@ async function fetchForecast(p, withHourly = false) {
   const r = await fetch(u);
   if (!r.ok) throw new Error('weather fetch failed');
   return r.json();
+}
+
+// Multi-coordinate fetch — Open-Meteo returns an array when you pass comma-separated coords.
+async function fetchForecastMulti(coords) {
+  const lats = coords.map(c => c[0]).join(',');
+  const lons = coords.map(c => c[1]).join(',');
+  const u = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}` +
+    `&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,precipitation_probability_max` +
+    `&timezone=auto&forecast_days=16&wind_speed_unit=mph&temperature_unit=fahrenheit`;
+  const r = await fetch(u);
+  if (!r.ok) throw new Error('route weather failed');
+  const j = await r.json();
+  return Array.isArray(j) ? j : [j];
+}
+
+async function fetchMarineMulti(coords) {
+  try {
+    const lats = coords.map(c => c[0]).join(',');
+    const lons = coords.map(c => c[1]).join(',');
+    const u = `https://marine-api.open-meteo.com/v1/marine?latitude=${lats}&longitude=${lons}` +
+      `&daily=wave_height_max,wave_period_max&timezone=auto&forecast_days=7`;
+    const r = await fetch(u);
+    if (!r.ok) return null;
+    const j = await r.json();
+    return Array.isArray(j) ? j : [j];
+  } catch { return null; }
 }
 
 async function fetchMarine(p) {
@@ -539,6 +593,108 @@ function renderNormal(card, p) {
   `;
 }
 
+function aggregateRoute(arr, dateISO) {
+  const codes = [], his = [], los = [], pops = [], winds = [];
+  arr.forEach(d => {
+    const idx = d?.daily?.time?.indexOf(dateISO);
+    if (idx == null || idx < 0) return;
+    codes.push(d.daily.weather_code[idx]);
+    his.push(d.daily.temperature_2m_max[idx]);
+    los.push(d.daily.temperature_2m_min[idx]);
+    pops.push(d.daily.precipitation_probability_max?.[idx] ?? 0);
+    winds.push(d.daily.wind_speed_10m_max?.[idx] ?? 0);
+  });
+  if (!codes.length) return null;
+  // Pick the most common weather code as representative; track if any waypoint is markedly worse.
+  const counts = {};
+  let modeC = codes[0], modeN = 0;
+  for (const c of codes) { counts[c] = (counts[c]||0) + 1; if (counts[c] > modeN) { modeN = counts[c]; modeC = c; } }
+  return {
+    code: modeC,
+    codes,
+    hi: { min: Math.min(...his), max: Math.max(...his) },
+    lo: { min: Math.min(...los), max: Math.max(...los) },
+    pop: Math.max(...pops),
+    wind: { min: Math.min(...winds), max: Math.max(...winds) },
+  };
+}
+
+function aggregateMarineRoute(arr, dateISO) {
+  if (!arr) return null;
+  const heights = [], periods = [];
+  arr.forEach(d => {
+    const idx = d?.daily?.time?.indexOf(dateISO);
+    if (idx == null || idx < 0) return;
+    const h = d.daily.wave_height_max?.[idx];
+    const pr = d.daily.wave_period_max?.[idx];
+    if (h != null) heights.push(h);
+    if (pr != null) periods.push(pr);
+  });
+  if (!heights.length) return null;
+  return {
+    minM: Math.min(...heights),
+    maxM: Math.max(...heights),
+    avgPeriod: periods.length ? periods.reduce((a,b)=>a+b)/periods.length : null,
+  };
+}
+
+const fmtRange = (rng, unit='°') => {
+  const lo = Math.round(rng.min), hi = Math.round(rng.max);
+  return hi - lo <= 1 ? `${hi}${unit}` : `${lo}–${hi}${unit}`;
+};
+const fmtWaveRange = (m) => {
+  const lo = mToFt(m.minM), hi = mToFt(m.maxM);
+  return hi - lo < 0.5 ? `${hi.toFixed(1)} ft` : `${lo.toFixed(1)}–${hi.toFixed(1)} ft`;
+};
+
+function renderSeaRoute(card, p, route, agg, marineAgg, data0) {
+  const w = card.querySelector('.weather');
+  const [icon, label] = wmo(agg.code);
+  const tempLine = `${fmtRange(agg.hi, '°')} / ${fmtRange(agg.lo, '°F')}`;
+  const wave = marineAgg
+    ? `<span class="wave">🌊 ${fmtWaveRange(marineAgg)} · ${seaState(mToFt(marineAgg.maxM))}${marineAgg.avgPeriod ? ' · ' + Math.round(marineAgg.avgPeriod) + 's' : ''}</span>`
+    : '';
+
+  // Reuse the 5-day strip from the first waypoint's daily data so the card still shows the trip context.
+  let stripHTML = '';
+  if (data0?.daily) {
+    const portIdx = data0.daily.time.indexOf(p.d);
+    const startIdx = portIdx >= 0 ? portIdx : 0;
+    const endIdx = Math.min(startIdx + 5, data0.daily.time.length);
+    const days = [];
+    for (let i = startIdx; i < endIdx; i++) {
+      days.push({
+        date: data0.daily.time[i],
+        code: data0.daily.weather_code[i],
+        hi: Math.round(data0.daily.temperature_2m_max[i]),
+        lo: Math.round(data0.daily.temperature_2m_min[i]),
+      });
+    }
+    stripHTML = `<div class="forecast">${days.map(d => {
+      const [ic] = wmo(d.code);
+      const lbl = new Date(d.date+'T00:00:00').toLocaleDateString(undefined, { weekday:'short' });
+      return `<div class="day"><div>${lbl}</div><div class="d-icon">${ic}</div><div class="d-hi">${d.hi}°</div><div class="d-lo">${d.lo}°</div></div>`;
+    }).join('')}</div>`;
+  }
+
+  w.innerHTML = `
+    <div class="route-line">↝ ${route.label} <span class="waters">· ${route.waters}</span></div>
+    <div class="current">
+      <div class="icon">${icon}</div>
+      <div style="flex:1">
+        <div class="temp">${tempLine}</div>
+        <div class="cond">${label} · ${agg.pop}% precip</div>
+        <div class="meta">
+          <span>💨 ${fmtRange(agg.wind, '')} mph</span>
+          ${wave}
+        </div>
+      </div>
+    </div>
+    ${sunHTML(p)}
+    ${stripHTML}
+  `;
+}
+
 function renderSea(card, p, data, marine) {
   const w = card.querySelector('.weather');
   const wave = waveLineHTML(marine, p.d);
@@ -590,14 +746,35 @@ async function main() {
     const isNext = i === nextIdx;
     try {
       if (p.sea) {
-        if (du >= 0 && du < FORECAST_HORIZON) {
+        const route = ROUTES[p.d];
+        if (du >= 0 && du < FORECAST_HORIZON && route) {
+          // Multi-waypoint sample of the day's course.
+          const [routeArr, marineArr] = await Promise.all([
+            fetchForecastMulti(route.course),
+            du < MARINE_HORIZON ? fetchMarineMulti(route.course) : Promise.resolve(null),
+          ]);
+          const agg = aggregateRoute(routeArr, p.d);
+          const marineAgg = aggregateMarineRoute(marineArr, p.d);
+          if (agg) {
+            renderSeaRoute(card, p, route, agg, marineAgg, routeArr[0]);
+          } else {
+            renderSea(card, p, null, null);
+          }
+        } else if (du >= 0 && du < FORECAST_HORIZON) {
+          // No route defined — fall back to single-point sample
           const [data, marine] = await Promise.all([
             fetchForecast(p, false),
             du < MARINE_HORIZON ? fetchMarine(p) : Promise.resolve(null),
           ]);
           renderSea(card, p, data, marine);
         } else {
+          // Beyond forecast window — still show the route label as a hint
           renderSea(card, p, null, null);
+          if (route) {
+            const w = card.querySelector('.weather');
+            w.insertAdjacentHTML('afterbegin',
+              `<div class="route-line">↝ ${route.label} <span class="waters">· ${route.waters}</span></div>`);
+          }
         }
         return;
       }
