@@ -256,7 +256,7 @@ const LOOK_FOR = {
   '2026-06-16': '🦦 Norway\'s smallest cathedral nearby. WWII commando raid site (Operation Archery, 1941). Otters in protected coves.',
   '2026-06-17': '⛪ Nidaros Cathedral — the only Gothic cathedral in Norway, medieval coronation site. Harbour porpoises in the fjord.',
   '2026-06-18': '🐋 Sperm whale waters off Vesterålen to port. Andenes is the most reliable sperm whale spot on earth.',
-  '2026-06-19': '🐦 Lofoten\'s granite peaks rising straight from the sea. Stockfish racks on shore. Sea eagles, puffins, occasional orcas.',
+  '2026-06-19': '🐦 Lofoten\'s granite peaks rising straight from the sea. Stockfish racks on shore. Peak puffin nesting season; sea eagles soaring; white-beaked dolphins common. (Orcas here only in winter.)',
   '2026-06-20': '🦌 "Gateway to the Arctic." The Arctic Cathedral looks like an iceberg. Reindeer outside town; one of Europe\'s densest sea eagle populations.',
   '2026-06-21': '🌍 World\'s northernmost continental point. Reindeer on the plateau, puffin colony at Gjesværstappan, kittiwakes + fulmars on the cliffs.',
   '2026-06-22': '🐳 Open Norwegian Sea — orca, fin, minke whales possible. Watch the bow wake for dolphins.',
@@ -479,14 +479,19 @@ async function fetchMarineMulti(coords) {
   } catch { return null; }
 }
 
-// iNaturalist API — recent cetacean (order Cetacea) sightings near a point.
-// Free, no key, CORS-enabled.
+// iNaturalist API — recent sightings near a point, across multiple charm-forward taxa.
+// Free, no key, CORS-enabled. Data is naturally in-season (filtered to last 30 days).
+//   152871 = Cetacea (whales, dolphins, porpoises)
+//   41603  = Pinnipedia (seals, walruses)
+//   4380   = Alcidae (puffins, razorbills, guillemots)
+//   5301   = Accipitridae (eagles, hawks — sea eagles especially)
+const WILDLIFE_TAXA = '152871,41603,4380,5301';
 async function fetchWildlife(lat, lon, radiusKm = 50, days = 30) {
   const since = new Date(Date.now() - days * 86400000).toISOString().slice(0,10);
-  const u = `https://api.inaturalist.org/v1/observations?taxon_id=152871` +
+  const u = `https://api.inaturalist.org/v1/observations?taxon_id=${WILDLIFE_TAXA}` +
     `&lat=${lat}&lng=${lon}&radius=${radiusKm}` +
     `&d1=${since}&quality_grade=research,needs_id` +
-    `&order_by=observed_on&order=desc&per_page=30`;
+    `&order_by=observed_on&order=desc&per_page=50`;
   try {
     const r = await fetch(u);
     if (!r.ok) return [];
@@ -612,14 +617,13 @@ function sunHTML(p) {
 function discoveriesHTML(p, wildlife, isSeaDay = false) {
   const lines = [];
 
-  // 1. Wildlife (live from iNaturalist, last 30 days nearby)
+  // 1. Wildlife (live from iNaturalist, last 30 days nearby — naturally in-season)
   if (wildlife && wildlife.length) {
     const top = wildlife.slice(0, 4);
     const list = top.map(w => `<em>${w.name}</em> <span class="dim">(${fmtAge(w.date)}${w.distMi != null ? `, ${w.distMi}mi` : ''})</span>`).join(' · ');
-    lines.push(`<div class="disc-line"><span class="disc-icon">🐋</span><span class="disc-body">${list}</span></div>`);
+    lines.push(`<div class="disc-line"><span class="disc-icon">🔭</span><span class="disc-body">${list}</span></div>`);
   } else if (wildlife != null) {
-    // Fetched, but nothing in last 30 days within 50km
-    lines.push(`<div class="disc-line"><span class="disc-icon">🐋</span><span class="disc-body dim">No recent sightings logged here</span></div>`);
+    lines.push(`<div class="disc-line"><span class="disc-icon">🔭</span><span class="disc-body dim">No recent sightings logged here</span></div>`);
   }
 
   // 2. Offshore installations near route/port
