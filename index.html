@@ -191,6 +191,84 @@
   .disc-line .bird-recent { color: var(--ink); font-weight: 500; }
   .disc-line .bird-notable { color: #ffd479; font-weight: 600; }
   .disc-line .bird-notable:hover, .disc-line .bird-recent:hover { text-decoration: underline; }
+  .birds-trigger {
+    background: none; border: none; padding: 0; cursor: pointer;
+    color: inherit; font: inherit; text-align: left;
+    -webkit-tap-highlight-color: rgba(108,193,255,0.15);
+  }
+  .birds-trigger em { color: var(--accent); font-style: normal; font-weight: 600; }
+  .birds-trigger:hover em { text-decoration: underline; }
+
+  /* Bird gallery modal */
+  .modal {
+    position: fixed; inset: 0;
+    background: rgba(11, 22, 34, 0.96);
+    z-index: 100; display: none; flex-direction: column;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .modal.open { display: flex; }
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 10px calc(16px + env(safe-area-inset-left));
+    border-bottom: 1px solid var(--line);
+  }
+  .modal-title {
+    font-size: 16px; font-weight: 600; line-height: 1.25;
+  }
+  .modal-subtitle {
+    font-size: 11px; color: var(--muted); margin-top: 2px;
+  }
+  .modal-close {
+    background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--ink); width: 36px; height: 36px;
+    font-size: 18px; border-radius: 999px;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    flex-shrink: 0;
+  }
+  .modal-body {
+    flex: 1; overflow-y: auto;
+    padding: 12px calc(16px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+    -webkit-overflow-scrolling: touch;
+  }
+  .bird-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+  @media (min-width: 600px) {
+    .bird-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
+  }
+  .bird-tile {
+    display: flex; flex-direction: column; gap: 6px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px;
+    text-decoration: none; color: var(--ink);
+    -webkit-tap-highlight-color: rgba(108,193,255,0.15);
+  }
+  .bird-tile.notable { border-color: #ffd479; background: linear-gradient(180deg, rgba(255,212,121,0.08), var(--panel) 60%); }
+  .bird-tile .photo-wrap {
+    width: 100%; aspect-ratio: 4/3; background: var(--panel-2);
+    border-radius: 6px; overflow: hidden; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; color: var(--dim);
+  }
+  .bird-tile img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  .bird-tile .name {
+    font-size: 12.5px; font-weight: 500; line-height: 1.25;
+    letter-spacing: -0.01em;
+  }
+  .bird-tile.notable .name { color: #ffd479; }
+  .bird-tile .name .star { margin-right: 2px; }
+  .bird-tile .sci { font-size: 10.5px; color: var(--dim); font-style: italic; line-height: 1.2; }
+  .bird-tile .meta { font-size: 10.5px; color: var(--muted); margin-top: auto; }
+  .modal-footer {
+    font-size: 10.5px; color: var(--dim); padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); text-align: center;
+    border-top: 1px solid var(--line);
+  }
+  .modal-footer a { color: var(--accent); text-decoration: none; }
   .placeholder { color: var(--muted); font-size: 11px; font-style: italic; padding: 4px 0; text-align: center; }
   .err { color: #ff9a9a; font-size: 11px; }
   footer { max-width: 1400px; margin: 0 auto; padding: 0 calc(16px + env(safe-area-inset-right)) calc(30px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); color: var(--dim); font-size: 10.5px; }
@@ -209,8 +287,22 @@
 </header>
 <main id="grid"></main>
 <footer>
-  Weather: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>. Sea state: Open-Meteo Marine (7-day horizon). Sunrise/sunset computed astronomically. Climate normals shown for ports beyond the 16-day forecast window — replaced with live forecast as the date approaches.
+  Weather: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>. Sea state: Open-Meteo Marine (7-day horizon). Sunrise/sunset computed astronomically. Birds: <a href="https://ebird.org" target="_blank" rel="noopener">eBird</a> community sightings. Marine mammals: <a href="https://inaturalist.org" target="_blank" rel="noopener">iNaturalist</a>. Photos: Wikipedia.
 </footer>
+
+<div class="modal" id="bird-modal" role="dialog" aria-modal="true" aria-labelledby="bird-modal-title">
+  <div class="modal-header">
+    <div>
+      <div class="modal-title" id="bird-modal-title">Birds nearby</div>
+      <div class="modal-subtitle">eBird community sightings, last 14 days · ✨ marks unusual species · tap any tile for details</div>
+    </div>
+    <button class="modal-close" id="bird-modal-close" aria-label="Close">✕</button>
+  </div>
+  <div class="modal-body" id="bird-modal-body"></div>
+  <div class="modal-footer">
+    Data from <a href="https://ebird.org" target="_blank" rel="noopener">eBird</a> · photos from Wikipedia · ✨ flagged by eBird's regional reviewers as unusual
+  </div>
+</div>
 
 <script>
 const PORTS = [
@@ -647,7 +739,8 @@ async function fetchBirds(lat, lon) {
   for (const o of recent) {
     if (!o.speciesCode || !o.comName) continue;
     if (!bySpec[o.speciesCode]) {
-      bySpec[o.speciesCode] = { code: o.speciesCode, name: o.comName, date: o.obsDt, notable: false,
+      bySpec[o.speciesCode] = { code: o.speciesCode, name: o.comName, sciName: o.sciName,
+        date: o.obsDt, notable: false,
         distMi: Math.round(kmToMi(haversineKm(lat, lon, o.lat, o.lng))) };
     } else if (o.obsDt > bySpec[o.speciesCode].date) {
       bySpec[o.speciesCode].date = o.obsDt;
@@ -656,7 +749,8 @@ async function fetchBirds(lat, lon) {
   for (const o of notable) {
     if (!o.speciesCode || !o.comName) continue;
     if (!bySpec[o.speciesCode]) {
-      bySpec[o.speciesCode] = { code: o.speciesCode, name: o.comName, date: o.obsDt, notable: true,
+      bySpec[o.speciesCode] = { code: o.speciesCode, name: o.comName, sciName: o.sciName,
+        date: o.obsDt, notable: true,
         distMi: Math.round(kmToMi(haversineKm(lat, lon, o.lat, o.lng))) };
     } else {
       bySpec[o.speciesCode].notable = true;
@@ -667,6 +761,25 @@ async function fetchBirds(lat, lon) {
     if (a.notable !== b.notable) return a.notable ? -1 : 1;
     return (b.date || '').localeCompare(a.date || '');
   });
+}
+
+// Wikipedia photo lookup (free, no key, CORS) — cached per species code.
+const BIRD_PHOTOS = {};
+async function getBirdPhoto(b) {
+  if (BIRD_PHOTOS[b.code] !== undefined) return BIRD_PHOTOS[b.code];
+  for (const term of [b.sciName, b.name].filter(Boolean)) {
+    try {
+      const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term.replace(/ /g, '_'))}`);
+      if (!r.ok) continue;
+      const j = await r.json();
+      if (j.thumbnail?.source) {
+        BIRD_PHOTOS[b.code] = j.thumbnail.source;
+        return j.thumbnail.source;
+      }
+    } catch {}
+  }
+  BIRD_PHOTOS[b.code] = null;
+  return null;
 }
 
 async function fetchMarine(p) {
@@ -797,16 +910,13 @@ function discoveriesHTML(p, wildlife, birds, isSeaDay = false) {
     lines.push(`<div class="disc-line"><span class="disc-icon">🐋</span><span class="disc-body dim">No recent marine mammal sightings here</span></div>`);
   }
 
-  // 1b. Birds (eBird, recent + notable; notable highlighted with ✨)
+  // 1b. Birds (eBird) — single summary link that opens a gallery modal
   if (birds && birds.length) {
-    const top = birds.slice(0, 6);
-    const list = top.map(b => {
-      const url = `https://ebird.org/species/${b.code}`;
-      const cls = b.notable ? 'bird-notable' : 'bird-recent';
-      const prefix = b.notable ? '✨' : '';
-      return `<a class="${cls}" href="${url}" target="_blank" rel="noopener">${prefix}${b.name}</a>`;
-    }).join(' · ');
-    lines.push(`<div class="disc-line"><span class="disc-icon">🐦</span><span class="disc-body">${list}</span></div>`);
+    const notableCount = birds.filter(b => b.notable).length;
+    const summary = notableCount > 0
+      ? `<em>${birds.length} recent species</em> · <span class="bird-notable">✨${notableCount} unusual</span>`
+      : `<em>${birds.length} recent species</em>`;
+    lines.push(`<div class="disc-line"><span class="disc-icon">🐦</span><span class="disc-body"><button class="birds-trigger" data-port-d="${p.d}">${summary} <span class="dim">→ tap for gallery</span></button></span></div>`);
   } else if (birds != null) {
     lines.push(`<div class="disc-line"><span class="disc-icon">🐦</span><span class="disc-body dim">No recent bird sightings nearby</span></div>`);
   }
@@ -1274,6 +1384,41 @@ async function refreshAll(force = false) {
   }
 }
 
+function openBirdModal(port, birds) {
+  const modal = document.getElementById('bird-modal');
+  const body = document.getElementById('bird-modal-body');
+  const title = document.getElementById('bird-modal-title');
+  const notableCount = birds.filter(b => b.notable).length;
+  title.textContent = `Birds near ${port.name} · ${birds.length} species${notableCount ? `, ${notableCount} unusual` : ''}`;
+
+  body.innerHTML = `<div class="bird-grid">${birds.map(b => `
+    <a class="bird-tile ${b.notable ? 'notable' : ''}" href="https://ebird.org/species/${b.code}" target="_blank" rel="noopener">
+      <div class="photo-wrap" data-code="${b.code}">🐦</div>
+      <div class="name">${b.notable ? '<span class="star">✨</span>' : ''}${b.name}</div>
+      ${b.sciName ? `<div class="sci">${b.sciName}</div>` : ''}
+      <div class="meta">${fmtAge(b.date)}${b.distMi != null ? ` · ${b.distMi}mi` : ''}</div>
+    </a>
+  `).join('')}</div>`;
+
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  // Lazy-load photos (Wikipedia REST API) — fires in parallel, fills tiles as they arrive.
+  for (const b of birds) {
+    getBirdPhoto(b).then(url => {
+      if (!url) return;
+      const wrap = body.querySelector(`.photo-wrap[data-code="${b.code}"]`);
+      if (!wrap) return;
+      wrap.innerHTML = `<img src="${url}" alt="${b.name}" loading="lazy">`;
+    });
+  }
+}
+
+function closeBirdModal() {
+  document.getElementById('bird-modal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
 function main() {
   const grid = document.getElementById('grid');
   for (let i = 0; i < PORTS.length; i++) {
@@ -1289,6 +1434,25 @@ function main() {
 
   const stamp = document.getElementById('updated');
   stamp.addEventListener('click', () => refreshAll(true));  // manual tap forces wildlife refresh too
+
+  // Bird gallery: event delegation for any .birds-trigger inside any card
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.birds-trigger');
+    if (!btn) return;
+    e.preventDefault();
+    const portD = btn.dataset.portD;
+    const idx = PORTS.findIndex(pp => pp.d === portD);
+    if (idx < 0 || !BIRDS[idx]?.length) return;
+    openBirdModal(PORTS[idx], BIRDS[idx]);
+  });
+  document.getElementById('bird-modal-close').addEventListener('click', closeBirdModal);
+  document.getElementById('bird-modal').addEventListener('click', e => {
+    // Click on backdrop (modal element itself) closes; click inside contents doesn't.
+    if (e.target.id === 'bird-modal') closeBirdModal();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeBirdModal();
+  });
   setInterval(tickClocks, 30000);
 
   // Re-fetch when the app becomes visible after being backgrounded — covers homescreen-PWA "open" event.
