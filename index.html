@@ -488,7 +488,7 @@ function waveLineHTML(marine, dateISO) {
   if (maxM == null) return '';
   const ft = mToFt(maxM);
   const state = seaState(ft);
-  return `<span class="wave">🌊 ${ft.toFixed(1)} ft${state ? ' · ' + state : ''}${perS ? ' · ' + Math.round(perS) + 's' : ''}</span>`;
+  return `<span class="wave">🌊 ${ft.toFixed(1)} ft${state ? ' · ' + state : ''}${perS ? ' · ' + Math.round(perS) + 's between crests' : ''}</span>`;
 }
 
 function renderForecast(card, p, data, marine, isNext) {
@@ -691,7 +691,7 @@ function renderSeaRoute(card, p, route, agg, marineAgg, data0) {
   const [icon, label] = wmo(agg.code);
   const tp = tempPair(agg.hi, agg.lo);
   const wave = marineAgg
-    ? `<span class="wave">🌊 ${fmtWaveRange(marineAgg)} · ${seaState(mToFt(marineAgg.maxM))}${marineAgg.avgPeriod ? ' · ' + Math.round(marineAgg.avgPeriod) + 's' : ''}</span>`
+    ? `<span class="wave">🌊 ${fmtWaveRange(marineAgg)} · ${seaState(mToFt(marineAgg.maxM))}${marineAgg.avgPeriod ? ' · ' + Math.round(marineAgg.avgPeriod) + 's between crests' : ''}</span>`
     : '';
 
   // Reuse the 5-day strip from the first waypoint's daily data so the card still shows the trip context.
