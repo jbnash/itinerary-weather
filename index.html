@@ -159,6 +159,19 @@
     display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline;
   }
   .route-line .waters { color: var(--dim); font-size: 10.5px; }
+  .discoveries {
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 8px 2px 0;
+    border-top: 1px solid var(--line);
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+  .disc-line { display: flex; gap: 6px; align-items: baseline; }
+  .disc-line .disc-icon { flex-shrink: 0; }
+  .disc-line .disc-body { flex: 1; }
+  .disc-line em { color: var(--ink); font-style: normal; font-weight: 500; }
+  .disc-line .dim { color: var(--dim); font-size: 10.5px; }
   .placeholder { color: var(--muted); font-size: 11px; font-style: italic; padding: 4px 0; text-align: center; }
   .err { color: #ff9a9a; font-size: 11px; }
   footer { max-width: 1400px; margin: 0 auto; padding: 0 calc(16px + env(safe-area-inset-right)) calc(30px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); color: var(--dim); font-size: 10.5px; }
@@ -234,6 +247,64 @@ const ROUTES = {
   '2026-07-09': { label: 'Oslo → Dover',             waters: 'Skagerrak / North Sea',
     course: [[59.5, 10.5], [58.0, 8.0], [55.5, 4.5], [53.5, 3.0], [52.0, 2.0]] },
 };
+
+// Curated "what to look for" per day — wildlife, landmarks, oddities. One sentence each.
+const LOOK_FOR = {
+  '2026-06-13': '🏭 Largest port in Europe — sailing out past Europoort container terminals; Borssele and Hollandse Kust wind farms to the north.',
+  '2026-06-14': '🌊 Crossing the heart of the North Sea oil belt. Watch for harbour porpoises and white-beaked dolphins.',
+  '2026-06-15': '🦅 Vøringsfossen waterfall as you enter the fjord. White-tailed sea eagles nest on the cliffs. Hardanger is the "Garden of Norway."',
+  '2026-06-16': '🦦 Norway\'s smallest cathedral nearby. WWII commando raid site (Operation Archery, 1941). Otters in protected coves.',
+  '2026-06-17': '⛪ Nidaros Cathedral — the only Gothic cathedral in Norway, medieval coronation site. Harbour porpoises in the fjord.',
+  '2026-06-18': '🐋 Sperm whale waters off Vesterålen to port. Andenes is the most reliable sperm whale spot on earth.',
+  '2026-06-19': '🐦 Lofoten\'s granite peaks rising straight from the sea. Stockfish racks on shore. Sea eagles, puffins, occasional orcas.',
+  '2026-06-20': '🦌 "Gateway to the Arctic." The Arctic Cathedral looks like an iceberg. Reindeer outside town; one of Europe\'s densest sea eagle populations.',
+  '2026-06-21': '🌍 World\'s northernmost continental point. Reindeer on the plateau, puffin colony at Gjesværstappan, kittiwakes + fulmars on the cliffs.',
+  '2026-06-22': '🐳 Open Norwegian Sea — orca, fin, minke whales possible. Watch the bow wake for dolphins.',
+  '2026-06-23': '🌊 Continuing south toward Shetland. Last big stretch for cetacean sightings before UK waters.',
+  '2026-06-24': '🦭 Sumburgh Head puffin colony — one of Europe\'s most accessible. Viking heritage; otters in the harbour; grey seals on the rocks.',
+  '2026-06-25': '🚢 Through busy shipping lanes — tankers, container ships, multiplying wind farms. Dogger Bank (largest under construction) to the north.',
+  '2026-06-26': '🏰 White cliffs of Dover. Norman castle, Channel Tunnel terminal. Roman pharos still standing — world\'s oldest extant lighthouse.',
+  '2026-06-27': '🌉 Europoort again — Maeslantkering storm-surge barrier visible from upper decks on approach.',
+  '2026-06-28': '🌬️ Crossing to Denmark. Wind farms multiply; Horns Rev fields to starboard.',
+  '2026-06-29': '🧜‍♀️ Little Mermaid, Tivoli, Nyhavn. Øresund Bridge visible from the harbour. Harbour seals near Trekroner fort.',
+  '2026-06-30': '🏛️ Denmark\'s second city. Moesgaard Viking Museum, Den Gamle By old town, Aros art museum with the rainbow rooftop.',
+  '2026-07-01': '🚂 Most passengers head to Berlin (3hrs by train). Stay-aboard: Warnemünde\'s lighthouse, beach, fishing village.',
+  '2026-07-02': '⚓ Old Hansa trade route. Few oil platforms — Baltic has a different character from the North Sea.',
+  '2026-07-03': '🏰 Best-preserved medieval old town in Northern Europe. Toompea Castle, Alexander Nevsky Cathedral. Estonia is the digital society.',
+  '2026-07-04': '🏝️ Suomenlinna sea fortress (UNESCO). Senate Square. Saunas everywhere; Allas Sea Pool by the harbour.',
+  '2026-07-05': '🗿 Archipelago of 30,000 islands on approach — one of Europe\'s most scenic sail-ins. Vasa Museum (the failed 1628 warship), Gamla Stan.',
+  '2026-07-06': '🏛️ Medieval walled city (UNESCO), built by the Hanseatic League. Limestone "rauk" sea stacks line the coast.',
+  '2026-07-07': '🌉 Through the Danish straits. Storebæltsbron bridge possibly visible. Harbour porpoises in the Kattegat.',
+  '2026-07-08': '🎭 Long Oslofjord approach. Akershus Fortress, slanted-roof Opera House, Vigeland sculpture park, Munch Museum.',
+  '2026-07-09': '🛢️ Crossing back through the North Sea oil belt — Forties, Brent, Ekofisk fields to the north. Last chance for orca sightings.',
+  '2026-07-10': '🏰 White cliffs again. The Roman pharos on the cliffs is the world\'s oldest standing lighthouse.',
+  '2026-07-11': '⚓ End of cruise. Final views of Europoort, container cranes, and the Maeslantkering storm-surge barrier.',
+};
+
+// Major offshore installations near the cruise route. Curated, not exhaustive.
+const PLATFORMS = [
+  // North Sea oil/gas — Norwegian sector
+  { name: 'Ekofisk',         op: 'ConocoPhillips', lat: 56.55, lon: 3.21,  type: 'oil',  note: 'First major Norwegian field (1969)' },
+  { name: 'Valhall',         op: 'Aker BP',        lat: 56.28, lon: 3.39,  type: 'oil' },
+  { name: 'Sleipner A',      op: 'Equinor',        lat: 58.37, lon: 1.91,  type: 'gas',  note: "World's first CO₂ storage project" },
+  { name: 'Heimdal',         op: 'Equinor',        lat: 59.57, lon: 2.23,  type: 'gas' },
+  { name: 'Troll A',         op: 'Equinor',        lat: 60.65, lon: 3.72,  type: 'gas',  note: 'Tallest structure ever moved (472m)' },
+  { name: 'Statfjord A',     op: 'Equinor',        lat: 61.25, lon: 1.85,  type: 'oil',  note: 'Concrete gravity base; visible for miles' },
+  { name: 'Gullfaks',        op: 'Equinor',        lat: 61.20, lon: 2.27,  type: 'oil' },
+  { name: 'Snorre',          op: 'Equinor',        lat: 61.45, lon: 2.15,  type: 'oil' },
+  // North Sea oil/gas — UK sector
+  { name: 'Brent Charlie',   op: 'Shell',          lat: 61.05, lon: 1.70,  type: 'oil',  note: 'Brent crude benchmark namesake' },
+  { name: 'Forties Alpha',   op: 'Apache',         lat: 57.73, lon: 0.97,  type: 'oil',  note: 'Forties crude benchmark namesake' },
+  { name: 'Buzzard',         op: 'CNOOC',          lat: 57.92, lon: -0.04, type: 'oil' },
+  // Offshore wind
+  { name: 'Hywind Tampen',   op: 'Equinor',        lat: 61.33, lon: 2.27,  type: 'wind', note: "World's largest floating wind farm" },
+  { name: 'Hornsea Two',     op: 'Ørsted',         lat: 53.92, lon: 1.79,  type: 'wind', note: "World's largest offshore wind farm" },
+  { name: 'Dogger Bank A',   op: 'SSE/Equinor',    lat: 54.85, lon: 2.40,  type: 'wind', note: 'Largest under construction' },
+  { name: 'Horns Rev 3',     op: 'Vattenfall',     lat: 55.70, lon: 7.70,  type: 'wind' },
+  { name: 'Anholt',          op: 'Ørsted',         lat: 56.60, lon: 11.21, type: 'wind' },
+  { name: 'Kriegers Flak',   op: 'Vattenfall',     lat: 55.00, lon: 13.10, type: 'wind' },
+  { name: 'Borssele',        op: 'Ørsted',         lat: 51.70, lon: 3.00,  type: 'wind' },
+];
 
 const WMO = {
   0:['☀️','Clear'], 1:['🌤️','Mostly clear'], 2:['⛅','Partly cloudy'], 3:['☁️','Overcast'],
@@ -340,6 +411,36 @@ function fmtDuration(hrs) {
   return `${h}h ${m.toString().padStart(2,'0')}m`;
 }
 
+// Distance + age helpers used for platforms + wildlife sightings.
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371, rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*rad) * Math.cos(lat2*rad) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+const kmToMi = km => km * 0.621371;
+function fmtAge(dateStr) {
+  const days = Math.round((Date.now() - new Date(dateStr).getTime()) / 86400000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.round(days/7)}w ago`;
+  return `${Math.round(days/30)}mo ago`;
+}
+
+function platformsNear(coords, maxKm) {
+  const out = [];
+  for (const plat of PLATFORMS) {
+    let minKm = Infinity;
+    for (const [lat, lon] of coords) {
+      const d = haversineKm(plat.lat, plat.lon, lat, lon);
+      if (d < minKm) minKm = d;
+    }
+    if (minKm <= maxKm) out.push({ ...plat, distKm: minKm, distMi: Math.round(kmToMi(minKm)) });
+  }
+  return out.sort((a,b) => a.distKm - b.distKm).slice(0, 5);
+}
+
 async function fetchForecast(p, withHourly = false) {
   const hourly = withHourly ? '&hourly=temperature_2m,weather_code,precipitation_probability,wind_speed_10m' : '';
   const u = `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}` +
@@ -376,6 +477,38 @@ async function fetchMarineMulti(coords) {
     const j = await r.json();
     return Array.isArray(j) ? j : [j];
   } catch { return null; }
+}
+
+// iNaturalist API — recent cetacean (order Cetacea) sightings near a point.
+// Free, no key, CORS-enabled.
+async function fetchWildlife(lat, lon, radiusKm = 50, days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString().slice(0,10);
+  const u = `https://api.inaturalist.org/v1/observations?taxon_id=152871` +
+    `&lat=${lat}&lng=${lon}&radius=${radiusKm}` +
+    `&d1=${since}&quality_grade=research,needs_id` +
+    `&order_by=observed_on&order=desc&per_page=30`;
+  try {
+    const r = await fetch(u);
+    if (!r.ok) return [];
+    const j = await r.json();
+    return j.results || [];
+  } catch { return []; }
+}
+
+// Collapse multiple observations to one entry per species, keeping the most recent.
+function dedupeWildlife(observations, queryLat, queryLon) {
+  const bySpecies = {};
+  for (const obs of observations) {
+    const name = obs.taxon?.preferred_common_name || obs.taxon?.name || 'Cetacean';
+    const date = obs.observed_on;
+    if (!date) continue;
+    if (!bySpecies[name] || date > bySpecies[name].date) {
+      const coords = obs.geojson?.coordinates;
+      const distMi = coords ? Math.round(kmToMi(haversineKm(queryLat, queryLon, coords[1], coords[0]))) : null;
+      bySpecies[name] = { name, date, distMi };
+    }
+  }
+  return Object.values(bySpecies).sort((a,b) => b.date.localeCompare(a.date));
 }
 
 async function fetchMarine(p) {
@@ -476,6 +609,41 @@ function sunHTML(p) {
   return `<div class="sun"><span>☀️↑ ${s.sunrise}</span><span>☀️↓ ${s.sunset}</span><span>${fmtDuration(s.daylightHours)} daylight</span></div>`;
 }
 
+function discoveriesHTML(p, wildlife, isSeaDay = false) {
+  const lines = [];
+
+  // 1. Wildlife (live from iNaturalist, last 30 days nearby)
+  if (wildlife && wildlife.length) {
+    const top = wildlife.slice(0, 4);
+    const list = top.map(w => `<em>${w.name}</em> <span class="dim">(${fmtAge(w.date)}${w.distMi != null ? `, ${w.distMi}mi` : ''})</span>`).join(' · ');
+    lines.push(`<div class="disc-line"><span class="disc-icon">🐋</span><span class="disc-body">${list}</span></div>`);
+  } else if (wildlife != null) {
+    // Fetched, but nothing in last 30 days within 50km
+    lines.push(`<div class="disc-line"><span class="disc-icon">🐋</span><span class="disc-body dim">No recent sightings logged here</span></div>`);
+  }
+
+  // 2. Offshore installations near route/port
+  const coords = isSeaDay && ROUTES[p.d]?.course ? ROUTES[p.d].course : [[p.lat, p.lon]];
+  const maxKm = isSeaDay ? 80 : 50;
+  const plats = platformsNear(coords, maxKm);
+  if (plats.length) {
+    const list = plats.map(pl => {
+      const typeIcon = pl.type === 'wind' ? '🌬️' : '🛢️';
+      return `${typeIcon} <em>${pl.name}</em> <span class="dim">${pl.distMi}mi</span>`;
+    }).join(' · ');
+    lines.push(`<div class="disc-line"><span class="disc-icon">📍</span><span class="disc-body">${list}</span></div>`);
+  }
+
+  // 3. Curated "what to look for"
+  const lookFor = LOOK_FOR[p.d];
+  if (lookFor) {
+    lines.push(`<div class="disc-line"><span class="disc-body">${lookFor}</span></div>`);
+  }
+
+  if (!lines.length) return '';
+  return `<div class="discoveries">${lines.join('')}</div>`;
+}
+
 function waveLineHTML(marine, dateISO) {
   if (!marine) return '';
   let maxM = null, perS = null;
@@ -494,7 +662,7 @@ function waveLineHTML(marine, dateISO) {
   return `<span class="wave">🌊 ${ft.toFixed(1)} ft${state ? ' · ' + state : ''}${perS ? ' · ' + Math.round(perS) + 's between crests' : ''}</span>`;
 }
 
-function renderForecast(card, p, data, marine, isNext) {
+function renderForecast(card, p, data, marine, isNext, wildlife) {
   const w = card.querySelector('.weather');
   const portDateIdx = data?.daily?.time?.indexOf(p.d) ?? -1;
   const startIdx = portDateIdx >= 0 ? portDateIdx : 0;
@@ -562,8 +730,9 @@ function renderForecast(card, p, data, marine, isNext) {
     </div>`;
 
   const hourlyHTML = isNext ? renderHourlyHTML(p, data) : '';
+  const discHTML = discoveriesHTML(p, wildlife, false);
 
-  w.innerHTML = curHTML + sunHTML(p) + stripHTML + hourlyHTML;
+  w.innerHTML = curHTML + sunHTML(p) + stripHTML + discHTML + hourlyHTML;
 }
 
 function renderHourlyHTML(p, data) {
@@ -612,7 +781,7 @@ function renderHourlyHTML(p, data) {
     </div>`;
 }
 
-function renderNormal(card, p) {
+function renderNormal(card, p, wildlife) {
   const n = NORMALS[p.name];
   const w = card.querySelector('.weather');
   const du = daysUntil(p.d);
@@ -632,6 +801,7 @@ function renderNormal(card, p) {
     </div>
     ${sunHTML(p)}
     <div class="placeholder">Typical ${new Date(p.d+'T00:00:00').toLocaleDateString(undefined,{month:'long'})} conditions. Live forecast unlocks in ~${du - FORECAST_HORIZON + 1}d.</div>
+    ${discoveriesHTML(p, wildlife, p.sea)}
   `;
 }
 
@@ -689,7 +859,7 @@ const fmtWaveRange = (m) => {
   return hi - lo < 0.5 ? `${hi.toFixed(1)} ft` : `${lo.toFixed(1)}–${hi.toFixed(1)} ft`;
 };
 
-function renderSeaRoute(card, p, route, agg, marineAgg, data0) {
+function renderSeaRoute(card, p, route, agg, marineAgg, data0, wildlife) {
   const w = card.querySelector('.weather');
   const [icon, label] = wmo(agg.code);
   const tp = tempPair(agg.hi, agg.lo);
@@ -735,19 +905,20 @@ function renderSeaRoute(card, p, route, agg, marineAgg, data0) {
     </div>
     ${sunHTML(p)}
     ${stripHTML}
+    ${discoveriesHTML(p, wildlife, true)}
   `;
 }
 
-function renderSea(card, p, data, marine) {
+function renderSea(card, p, data, marine, wildlife) {
   const w = card.querySelector('.weather');
   const wave = waveLineHTML(marine, p.d);
   if (!data) {
-    w.innerHTML = `<div class="placeholder">Cruising at sea.</div>${wave ? `<div class="meta" style="justify-content:center">${wave}</div>` : ''}${sunHTML(p)}`;
+    w.innerHTML = `<div class="placeholder">Cruising at sea.</div>${wave ? `<div class="meta" style="justify-content:center">${wave}</div>` : ''}${sunHTML(p)}${discoveriesHTML(p, wildlife, true)}`;
     return;
   }
   const idx = data?.daily?.time?.indexOf(p.d) ?? -1;
   if (idx < 0) {
-    w.innerHTML = `<div class="placeholder">Cruising at sea.</div>${sunHTML(p)}`;
+    w.innerHTML = `<div class="placeholder">Cruising at sea.</div>${sunHTML(p)}${discoveriesHTML(p, wildlife, true)}`;
     return;
   }
   const [icon, label] = wmo(data.daily.weather_code[idx]);
@@ -765,18 +936,23 @@ function renderSea(card, p, data, marine) {
       </div>
     </div>
     ${sunHTML(p)}
+    ${discoveriesHTML(p, wildlife, true)}
   `;
 }
 
 let CARDS = [];
 let NEXT_IDX = -1;
 let LAST_FETCH = 0;
+let LAST_WILDLIFE_FETCH = 0;
 let FETCHING = false;
-const STALE_MS = 5 * 60 * 1000;       // re-fetch if data older than this on visibility change
-const REFRESH_MS = 15 * 60 * 1000;    // foreground periodic refresh
+const WILDLIFE = new Array(PORTS.length).fill(null);  // dedupedWildlife[] per port, indexed
+const STALE_MS = 5 * 60 * 1000;          // re-fetch weather if older than this on visibility change
+const REFRESH_MS = 15 * 60 * 1000;       // foreground periodic refresh (weather only)
+const WILDLIFE_STALE_MS = 60 * 60 * 1000; // wildlife cached for 1 hour — it changes slowly
 
-async function loadWeatherFor(p, card, isNext) {
+async function loadWeatherFor(p, card, idx, isNext) {
   const du = daysUntil(p.d);
+  const wildlife = WILDLIFE[idx];
   try {
     if (p.sea) {
       const route = ROUTES[p.d];
@@ -787,16 +963,16 @@ async function loadWeatherFor(p, card, isNext) {
         ]);
         const agg = aggregateRoute(routeArr, p.d);
         const marineAgg = aggregateMarineRoute(marineArr, p.d);
-        if (agg) renderSeaRoute(card, p, route, agg, marineAgg, routeArr[0]);
-        else renderSea(card, p, null, null);
+        if (agg) renderSeaRoute(card, p, route, agg, marineAgg, routeArr[0], wildlife);
+        else renderSea(card, p, null, null, wildlife);
       } else if (du >= 0 && du < FORECAST_HORIZON) {
         const [data, marine] = await Promise.all([
           fetchForecast(p, false),
           du < MARINE_HORIZON ? fetchMarine(p) : Promise.resolve(null),
         ]);
-        renderSea(card, p, data, marine);
+        renderSea(card, p, data, marine, wildlife);
       } else {
-        renderSea(card, p, null, null);
+        renderSea(card, p, null, null, wildlife);
         if (route) {
           const w = card.querySelector('.weather');
           w.insertAdjacentHTML('afterbegin',
@@ -805,29 +981,50 @@ async function loadWeatherFor(p, card, isNext) {
       }
       return;
     }
-    if (du < 0) { renderNormal(card, p); return; }
+    if (du < 0) { renderNormal(card, p, wildlife); return; }
     if (du < FORECAST_HORIZON) {
       const [data, marine] = await Promise.all([
         fetchForecast(p, isNext),
         du < MARINE_HORIZON ? fetchMarine(p) : Promise.resolve(null),
       ]);
-      renderForecast(card, p, data, marine, isNext);
+      renderForecast(card, p, data, marine, isNext, wildlife);
     } else {
-      renderNormal(card, p);
+      renderNormal(card, p, wildlife);
     }
   } catch (e) {
     card.querySelector('.weather').innerHTML = `<div class="err">Couldn't load weather — ${e.message}</div>${sunHTML(p)}`;
   }
 }
 
-async function refreshAll() {
+// Wildlife is fetched separately from weather — much slower-changing, less critical to refresh.
+async function loadAllWildlife() {
+  await Promise.all(PORTS.map(async (p, i) => {
+    // Use route midpoint for sea days, port location otherwise
+    let lat = p.lat, lon = p.lon;
+    const route = ROUTES[p.d];
+    if (p.sea && route?.course?.length) {
+      const mid = route.course[Math.floor(route.course.length / 2)];
+      lat = mid[0]; lon = mid[1];
+    }
+    const obs = await fetchWildlife(lat, lon, 50, 30);
+    WILDLIFE[i] = dedupeWildlife(obs, lat, lon);
+  }));
+  LAST_WILDLIFE_FETCH = Date.now();
+}
+
+async function refreshAll(force = false) {
   if (FETCHING) return;
   FETCHING = true;
   const stamp = document.getElementById('updated');
   stamp.classList.add('busy');
   stamp.textContent = 'Refreshing…';
   try {
-    await Promise.all(PORTS.map((p, i) => loadWeatherFor(p, CARDS[i], i === NEXT_IDX)));
+    // Wildlife refreshes hourly (or on manual force) — it changes slowly.
+    const wildlifeStale = Date.now() - LAST_WILDLIFE_FETCH > WILDLIFE_STALE_MS;
+    if (force || wildlifeStale) {
+      await loadAllWildlife();
+    }
+    await Promise.all(PORTS.map((p, i) => loadWeatherFor(p, CARDS[i], i, i === NEXT_IDX)));
     LAST_FETCH = Date.now();
     stamp.textContent = `Updated ${new Date().toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' })} · tap to refresh`;
   } catch (e) {
@@ -852,7 +1049,7 @@ function main() {
   });
 
   const stamp = document.getElementById('updated');
-  stamp.addEventListener('click', refreshAll);
+  stamp.addEventListener('click', () => refreshAll(true));  // manual tap forces wildlife refresh too
   setInterval(tickClocks, 30000);
 
   // Re-fetch when the app becomes visible after being backgrounded — covers homescreen-PWA "open" event.
