@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b1622">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cruise">
 <title>Cruise Weather — Northern Europe, Jun–Jul 2026</title>
 <style>
   :root {
@@ -34,7 +38,17 @@
   }
   h1 { margin: 0 0 2px; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
   .sub { color: var(--muted); font-size: 12px; }
-  .updated { color: var(--dim); font-size: 11px; margin-top: 4px; }
+  .updated {
+    color: var(--dim); font-size: 11px; margin-top: 4px;
+    cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .updated:active { color: var(--accent); }
+  .updated.busy::after {
+    content: ''; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); animation: pulse 1s infinite ease-in-out;
+  }
+  @keyframes pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
   main {
     max-width: 1400px;
     margin: 0 auto;
@@ -723,75 +737,105 @@ function renderSea(card, p, data, marine) {
   `;
 }
 
-async function main() {
+let CARDS = [];
+let NEXT_IDX = -1;
+let LAST_FETCH = 0;
+let FETCHING = false;
+const STALE_MS = 5 * 60 * 1000;       // re-fetch if data older than this on visibility change
+const REFRESH_MS = 15 * 60 * 1000;    // foreground periodic refresh
+
+async function loadWeatherFor(p, card, isNext) {
+  const du = daysUntil(p.d);
+  try {
+    if (p.sea) {
+      const route = ROUTES[p.d];
+      if (du >= 0 && du < FORECAST_HORIZON && route) {
+        const [routeArr, marineArr] = await Promise.all([
+          fetchForecastMulti(route.course),
+          du < MARINE_HORIZON ? fetchMarineMulti(route.course) : Promise.resolve(null),
+        ]);
+        const agg = aggregateRoute(routeArr, p.d);
+        const marineAgg = aggregateMarineRoute(marineArr, p.d);
+        if (agg) renderSeaRoute(card, p, route, agg, marineAgg, routeArr[0]);
+        else renderSea(card, p, null, null);
+      } else if (du >= 0 && du < FORECAST_HORIZON) {
+        const [data, marine] = await Promise.all([
+          fetchForecast(p, false),
+          du < MARINE_HORIZON ? fetchMarine(p) : Promise.resolve(null),
+        ]);
+        renderSea(card, p, data, marine);
+      } else {
+        renderSea(card, p, null, null);
+        if (route) {
+          const w = card.querySelector('.weather');
+          w.insertAdjacentHTML('afterbegin',
+            `<div class="route-line">↝ ${route.label} <span class="waters">· ${route.waters}</span></div>`);
+        }
+      }
+      return;
+    }
+    if (du < 0) { renderNormal(card, p); return; }
+    if (du < FORECAST_HORIZON) {
+      const [data, marine] = await Promise.all([
+        fetchForecast(p, isNext),
+        du < MARINE_HORIZON ? fetchMarine(p) : Promise.resolve(null),
+      ]);
+      renderForecast(card, p, data, marine, isNext);
+    } else {
+      renderNormal(card, p);
+    }
+  } catch (e) {
+    card.querySelector('.weather').innerHTML = `<div class="err">Couldn't load weather — ${e.message}</div>${sunHTML(p)}`;
+  }
+}
+
+async function refreshAll() {
+  if (FETCHING) return;
+  FETCHING = true;
+  const stamp = document.getElementById('updated');
+  stamp.classList.add('busy');
+  stamp.textContent = 'Refreshing…';
+  try {
+    await Promise.all(PORTS.map((p, i) => loadWeatherFor(p, CARDS[i], i === NEXT_IDX)));
+    LAST_FETCH = Date.now();
+    stamp.textContent = `Updated ${new Date().toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' })} · tap to refresh`;
+  } catch (e) {
+    stamp.textContent = `Refresh failed — tap to retry`;
+  } finally {
+    stamp.classList.remove('busy');
+    FETCHING = false;
+  }
+}
+
+function main() {
   const grid = document.getElementById('grid');
-  let nextIdx = -1;
   for (let i = 0; i < PORTS.length; i++) {
     if (PORTS[i].sea) continue;
-    if (daysUntil(PORTS[i].d) >= 0) { nextIdx = i; break; }
+    if (daysUntil(PORTS[i].d) >= 0) { NEXT_IDX = i; break; }
   }
 
-  const cards = PORTS.map((p, i) => {
-    const c = dayCard(p, i, nextIdx);
+  CARDS = PORTS.map((p, i) => {
+    const c = dayCard(p, i, NEXT_IDX);
     grid.appendChild(c);
     return c;
   });
 
-  document.getElementById('updated').textContent = `Updated ${new Date().toLocaleString()}`;
+  const stamp = document.getElementById('updated');
+  stamp.addEventListener('click', refreshAll);
   setInterval(tickClocks, 30000);
 
-  await Promise.all(PORTS.map(async (p, i) => {
-    const card = cards[i];
-    const du = daysUntil(p.d);
-    const isNext = i === nextIdx;
-    try {
-      if (p.sea) {
-        const route = ROUTES[p.d];
-        if (du >= 0 && du < FORECAST_HORIZON && route) {
-          // Multi-waypoint sample of the day's course.
-          const [routeArr, marineArr] = await Promise.all([
-            fetchForecastMulti(route.course),
-            du < MARINE_HORIZON ? fetchMarineMulti(route.course) : Promise.resolve(null),
-          ]);
-          const agg = aggregateRoute(routeArr, p.d);
-          const marineAgg = aggregateMarineRoute(marineArr, p.d);
-          if (agg) {
-            renderSeaRoute(card, p, route, agg, marineAgg, routeArr[0]);
-          } else {
-            renderSea(card, p, null, null);
-          }
-        } else if (du >= 0 && du < FORECAST_HORIZON) {
-          // No route defined — fall back to single-point sample
-          const [data, marine] = await Promise.all([
-            fetchForecast(p, false),
-            du < MARINE_HORIZON ? fetchMarine(p) : Promise.resolve(null),
-          ]);
-          renderSea(card, p, data, marine);
-        } else {
-          // Beyond forecast window — still show the route label as a hint
-          renderSea(card, p, null, null);
-          if (route) {
-            const w = card.querySelector('.weather');
-            w.insertAdjacentHTML('afterbegin',
-              `<div class="route-line">↝ ${route.label} <span class="waters">· ${route.waters}</span></div>`);
-          }
-        }
-        return;
-      }
-      if (du < 0) { renderNormal(card, p); return; }
-      if (du < FORECAST_HORIZON) {
-        const [data, marine] = await Promise.all([
-          fetchForecast(p, isNext),
-          du < MARINE_HORIZON ? fetchMarine(p) : Promise.resolve(null),
-        ]);
-        renderForecast(card, p, data, marine, isNext);
-      } else {
-        renderNormal(card, p);
-      }
-    } catch (e) {
-      card.querySelector('.weather').innerHTML = `<div class="err">Couldn't load weather — ${e.message}</div>${sunHTML(p)}`;
+  // Re-fetch when the app becomes visible after being backgrounded — covers homescreen-PWA "open" event.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && Date.now() - LAST_FETCH > STALE_MS) {
+      refreshAll();
     }
-  }));
+  });
+  // Periodic background refresh while in foreground.
+  setInterval(() => {
+    if (document.visibilityState === 'visible') refreshAll();
+  }, REFRESH_MS);
+
+  refreshAll();
 }
 
 main();
