@@ -338,14 +338,14 @@
 <div class="modal" id="bird-modal" role="dialog" aria-modal="true" aria-labelledby="bird-modal-title">
   <div class="modal-header">
     <div>
-      <div class="modal-title" id="bird-modal-title">Birds nearby</div>
-      <div class="modal-subtitle">eBird community sightings, last 14 days · ✨ marks unusual species · tap any tile for details</div>
+      <div class="modal-title" id="bird-modal-title">Seabirds spotted nearby</div>
+      <div class="modal-subtitle">Birds visible from a cruise deck, reported in the last 14 days · tap any tile for the full eBird species page</div>
     </div>
     <button class="modal-close" id="bird-modal-close" aria-label="Close">✕</button>
   </div>
   <div class="modal-body" id="bird-modal-body"></div>
   <div class="modal-footer">
-    Data from <a href="https://ebird.org" target="_blank" rel="noopener">eBird</a> · photos from Wikipedia · ✨ flagged by eBird's regional reviewers as unusual
+    Data from <a href="https://ebird.org" target="_blank" rel="noopener">eBird</a> community sightings · photos from Wikipedia
   </div>
 </div>
 
@@ -764,6 +764,26 @@ function dedupeWildlife(observations, queryLat, queryLon) {
   return Object.values(bySpecies).sort((a,b) => b.date.localeCompare(a.date));
 }
 
+// Birds realistically visible from a cruise-ship deck in Northern Europe.
+// Codes verified against live eBird responses from Shetland + Tallinn — all confirmed real.
+const SHIP_BIRDS = new Set([
+  // Auks / puffins
+  'atlpuf', 'razorb', 'commur', 'blkgui',
+  // Gannets / fulmars / shearwaters / storm-petrels
+  'norgan', 'norful', 'manshe', 'bripet',
+  // Cormorants
+  'grecor', 'eursha1',
+  // Gulls / kittiwake / terns / skuas
+  'bklkit', 'arcter', 'comter', 'santer1', 'litter1', 'caster1',
+  'parjae', 'pomjae', 'gresku1', 'lotjae',
+  'euhgul1', 'gbbgul', 'lbbgul', 'mewgul', 'bkhgul', 'litgul',
+  // Sea ducks / goldeneye / loons / divers / mergansers
+  'comeid', 'kineid', 'comloo', 'retloo', 'arcloo', 'yebloo',
+  'rebmer', 'commer', 'comgol', 'blksco1', 'whwsco3', 'lotduc',
+  // Coastal raptors + corvids
+  'whteag', 'comrav', 'hoocro1', 'carcro1',
+]);
+
 // eBird API — recent + notable bird sightings near a point. Free key required; passed in header.
 // 50km is eBird's max radius; 14 days back default.
 const EBIRD_KEY = 'skbb23vrikvl';
@@ -776,36 +796,21 @@ async function fetchEbird(path, lat, lon, daysBack = 14, dist = 50) {
   } catch { return []; }
 }
 async function fetchBirds(lat, lon) {
-  const [recent, notable] = await Promise.all([
-    fetchEbird('recent', lat, lon),
-    fetchEbird('recent/notable', lat, lon),
-  ]);
+  // Only fetch recent — notable is dropped since "unusual for the area" isn't useful for casual ID.
+  const recent = await fetchEbird('recent', lat, lon);
   const bySpec = {};
   for (const o of recent) {
     if (!o.speciesCode || !o.comName) continue;
+    if (!SHIP_BIRDS.has(o.speciesCode)) continue;  // Only ship-visible species
     if (!bySpec[o.speciesCode]) {
       bySpec[o.speciesCode] = { code: o.speciesCode, name: o.comName, sciName: o.sciName,
-        date: o.obsDt, notable: false,
-        distMi: Math.round(kmToMi(haversineKm(lat, lon, o.lat, o.lng))) };
+        date: o.obsDt, distMi: Math.round(kmToMi(haversineKm(lat, lon, o.lat, o.lng))) };
     } else if (o.obsDt > bySpec[o.speciesCode].date) {
       bySpec[o.speciesCode].date = o.obsDt;
     }
   }
-  for (const o of notable) {
-    if (!o.speciesCode || !o.comName) continue;
-    if (!bySpec[o.speciesCode]) {
-      bySpec[o.speciesCode] = { code: o.speciesCode, name: o.comName, sciName: o.sciName,
-        date: o.obsDt, notable: true,
-        distMi: Math.round(kmToMi(haversineKm(lat, lon, o.lat, o.lng))) };
-    } else {
-      bySpec[o.speciesCode].notable = true;
-    }
-  }
-  // Notable first, then by recency.
-  return Object.values(bySpec).sort((a, b) => {
-    if (a.notable !== b.notable) return a.notable ? -1 : 1;
-    return (b.date || '').localeCompare(a.date || '');
-  });
+  // Most recent first.
+  return Object.values(bySpec).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 
 // Wikipedia photo lookup (free, no key, CORS) — cached per species code.
@@ -955,15 +960,12 @@ function discoveriesHTML(p, wildlife, birds, isSeaDay = false) {
     lines.push(`<div class="disc-line"><span class="disc-icon">🐋</span><span class="disc-body dim">No recent marine mammal sightings here</span></div>`);
   }
 
-  // 1b. Birds (eBird) — single summary link that opens a gallery modal
+  // 1b. Birds (eBird, filtered to ship-watchable species) — single summary link to gallery
   if (birds && birds.length) {
-    const notableCount = birds.filter(b => b.notable).length;
-    const summary = notableCount > 0
-      ? `<em>${birds.length} recent species</em> · <span class="bird-notable">✨${notableCount} unusual</span>`
-      : `<em>${birds.length} recent species</em>`;
-    lines.push(`<div class="disc-line"><span class="disc-icon">🐦</span><span class="disc-body"><button class="birds-trigger" data-port-d="${p.d}">${summary} <span class="dim">→ tap for gallery</span></button></span></div>`);
+    const summary = `<em>${birds.length} seabird${birds.length === 1 ? '' : 's'} spotted nearby</em>`;
+    lines.push(`<div class="disc-line"><span class="disc-icon">🐦</span><span class="disc-body"><button class="birds-trigger" data-port-d="${p.d}">${summary} <span class="dim">→ tap for ID gallery</span></button></span></div>`);
   } else if (birds != null) {
-    lines.push(`<div class="disc-line"><span class="disc-icon">🐦</span><span class="disc-body dim">No recent bird sightings nearby</span></div>`);
+    lines.push(`<div class="disc-line"><span class="disc-icon">🐦</span><span class="disc-body dim">No seabirds spotted nearby this week</span></div>`);
   }
 
   // 2. Offshore installations near route/port
@@ -1651,13 +1653,12 @@ function openBirdModal(port, birds) {
   const modal = document.getElementById('bird-modal');
   const body = document.getElementById('bird-modal-body');
   const title = document.getElementById('bird-modal-title');
-  const notableCount = birds.filter(b => b.notable).length;
-  title.textContent = `Birds near ${port.name} · ${birds.length} species${notableCount ? `, ${notableCount} unusual` : ''}`;
+  title.textContent = `Seabirds near ${port.name} · ${birds.length} species this week`;
 
   body.innerHTML = `<div class="bird-grid">${birds.map(b => `
-    <a class="bird-tile ${b.notable ? 'notable' : ''}" href="https://ebird.org/species/${b.code}" target="_blank" rel="noopener">
+    <a class="bird-tile" href="https://ebird.org/species/${b.code}" target="_blank" rel="noopener">
       <div class="photo-wrap" data-code="${b.code}">🐦</div>
-      <div class="name">${b.notable ? '<span class="star">✨</span>' : ''}${b.name}</div>
+      <div class="name">${b.name}</div>
       ${b.sciName ? `<div class="sci">${b.sciName}</div>` : ''}
       <div class="meta">${fmtAge(b.date)}${b.distMi != null ? ` · ${b.distMi}mi` : ''}</div>
     </a>
