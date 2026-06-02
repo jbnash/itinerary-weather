@@ -186,8 +186,11 @@
   .disc-line em { color: var(--ink); font-style: normal; font-weight: 500; }
   .disc-line .dim { color: var(--dim); font-size: 10.5px; }
   .disc-line a { text-decoration: none; }
-  .disc-line a em { text-decoration: none; }
+  /* Sighting links read as tappable on touch (no hover): accent color + dotted underline. */
+  .disc-line a em { color: var(--accent); text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
   .disc-line a:hover em, .disc-line a:hover { text-decoration: underline; }
+  .disc-line .unconfirmed { color: #ffb04a; font-size: 9.5px; font-weight: 600; letter-spacing: 0.2px; white-space: nowrap; }
+  .disc-line .zone-enter { color: var(--accent); font-weight: 700; letter-spacing: 0.02em; }
   .disc-line .bird-recent { color: var(--ink); font-weight: 500; }
   .disc-line .bird-notable { color: #ffd479; font-weight: 600; }
   .disc-line .bird-notable:hover, .disc-line .bird-recent:hover { text-decoration: underline; }
@@ -196,8 +199,9 @@
     color: inherit; font: inherit; text-align: left;
     -webkit-tap-highlight-color: rgba(108,193,255,0.15);
   }
-  .birds-trigger em { color: var(--accent); font-style: normal; font-weight: 600; }
-  .birds-trigger:hover em { text-decoration: underline; }
+  /* Matches the sighting links: accent + dotted underline so it reads as tappable on touch. */
+  .birds-trigger em { color: var(--accent); font-style: normal; font-weight: 600; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+  .birds-trigger:hover em { text-decoration-style: solid; }
 
   /* Bird gallery modal */
   .modal {
@@ -325,12 +329,12 @@
   <div class="sub">13 Jun – 11 Jul 2026 · Rotterdam → Norway → UK → Baltic → Rotterdam</div>
   <div class="updated" id="updated"></div>
   <div class="fx" id="fx"></div>
-  <button class="track-me" id="track-me" aria-pressed="false">📍 Track me</button>
+  <button class="track-me" id="track-me" aria-pressed="false">📍 What's around me?</button>
   <div class="live-status" id="live-status"></div>
 </header>
 <main id="grid"></main>
 <footer>
-  Weather: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>. Sea state: Open-Meteo Marine (7-day horizon). Sunrise/sunset computed astronomically. Birds: <a href="https://ebird.org" target="_blank" rel="noopener">eBird</a> community sightings. Marine mammals: <a href="https://inaturalist.org" target="_blank" rel="noopener">iNaturalist</a>. Photos: Wikipedia.
+  Weather: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>. Sea state: Open-Meteo Marine (7-day horizon). Sunrise/sunset computed astronomically. Birds: <a href="https://ebird.org" target="_blank" rel="noopener">eBird</a> community sightings. Marine mammals: <a href="https://inaturalist.org" target="_blank" rel="noopener">iNaturalist</a>. Photos: Wikipedia. Live-position landmarks, wrecks, seabed depths &amp; waters are curated approximations for interest — not for navigation.
 </footer>
 
 <div class="modal" id="lighthouse-modal" role="dialog" aria-modal="true" aria-labelledby="lh-modal-title">
@@ -453,26 +457,26 @@ const LOOK_FOR = {
 // Major offshore installations near the cruise route. Curated, not exhaustive.
 const PLATFORMS = [
   // North Sea oil/gas — Norwegian sector
-  { name: 'Ekofisk',         op: 'ConocoPhillips', lat: 56.55, lon: 3.21,  type: 'oil',  note: 'First major Norwegian field (1969)' },
-  { name: 'Valhall',         op: 'Aker BP',        lat: 56.28, lon: 3.39,  type: 'oil' },
-  { name: 'Sleipner A',      op: 'Equinor',        lat: 58.37, lon: 1.91,  type: 'gas',  note: "World's first CO₂ storage project" },
+  { name: 'Ekofisk',         op: 'ConocoPhillips', lat: 56.55, lon: 3.21,  type: 'oil',  note: 'First major Norwegian field (1969)', wiki: 'Ekofisk oil field' },
+  { name: 'Valhall',         op: 'Aker BP',        lat: 56.28, lon: 3.39,  type: 'oil',  wiki: 'Valhall oil field' },
+  { name: 'Sleipner A',      op: 'Equinor',        lat: 58.37, lon: 1.91,  type: 'gas',  note: "World's first CO₂ storage project", wiki: 'Sleipner gas field' },
   { name: 'Heimdal',         op: 'Equinor',        lat: 59.57, lon: 2.23,  type: 'gas' },
-  { name: 'Troll A',         op: 'Equinor',        lat: 60.65, lon: 3.72,  type: 'gas',  note: 'Tallest structure ever moved (472m)' },
-  { name: 'Statfjord A',     op: 'Equinor',        lat: 61.25, lon: 1.85,  type: 'oil',  note: 'Concrete gravity base; visible for miles' },
-  { name: 'Gullfaks',        op: 'Equinor',        lat: 61.20, lon: 2.27,  type: 'oil' },
-  { name: 'Snorre',          op: 'Equinor',        lat: 61.45, lon: 2.15,  type: 'oil' },
+  { name: 'Troll A',         op: 'Equinor',        lat: 60.65, lon: 3.72,  type: 'gas',  note: 'Tallest structure ever moved (472m)', wiki: 'Troll A platform' },
+  { name: 'Statfjord A',     op: 'Equinor',        lat: 61.25, lon: 1.85,  type: 'oil',  note: 'Concrete gravity base; visible for miles', wiki: 'Statfjord oil field' },
+  { name: 'Gullfaks',        op: 'Equinor',        lat: 61.20, lon: 2.27,  type: 'oil',  wiki: 'Gullfaks oil field' },
+  { name: 'Snorre',          op: 'Equinor',        lat: 61.45, lon: 2.15,  type: 'oil',  wiki: 'Snorre oil field' },
   // North Sea oil/gas — UK sector
-  { name: 'Brent Charlie',   op: 'Shell',          lat: 61.05, lon: 1.70,  type: 'oil',  note: 'Brent crude benchmark namesake' },
-  { name: 'Forties Alpha',   op: 'Apache',         lat: 57.73, lon: 0.97,  type: 'oil',  note: 'Forties crude benchmark namesake' },
-  { name: 'Buzzard',         op: 'CNOOC',          lat: 57.92, lon: -0.04, type: 'oil' },
+  { name: 'Brent Charlie',   op: 'Shell',          lat: 61.05, lon: 1.70,  type: 'oil',  note: 'Brent crude benchmark namesake', wiki: 'Brent oilfield' },
+  { name: 'Forties Alpha',   op: 'Apache',         lat: 57.73, lon: 0.97,  type: 'oil',  note: 'Forties crude benchmark namesake', wiki: 'Forties Oil Field' },
+  { name: 'Buzzard',         op: 'CNOOC',          lat: 57.92, lon: -0.04, type: 'oil',  wiki: 'Buzzard oilfield' },
   // Offshore wind
-  { name: 'Hywind Tampen',   op: 'Equinor',        lat: 61.33, lon: 2.27,  type: 'wind', note: "World's largest floating wind farm" },
-  { name: 'Hornsea Two',     op: 'Ørsted',         lat: 53.92, lon: 1.79,  type: 'wind', note: "World's largest offshore wind farm" },
-  { name: 'Dogger Bank A',   op: 'SSE/Equinor',    lat: 54.85, lon: 2.40,  type: 'wind', note: 'Largest under construction' },
-  { name: 'Horns Rev 3',     op: 'Vattenfall',     lat: 55.70, lon: 7.70,  type: 'wind' },
-  { name: 'Anholt',          op: 'Ørsted',         lat: 56.60, lon: 11.21, type: 'wind' },
-  { name: 'Kriegers Flak',   op: 'Vattenfall',     lat: 55.00, lon: 13.10, type: 'wind' },
-  { name: 'Borssele',        op: 'Ørsted',         lat: 51.70, lon: 3.00,  type: 'wind' },
+  { name: 'Hywind Tampen',   op: 'Equinor',        lat: 61.33, lon: 2.27,  type: 'wind', note: "World's largest floating wind farm", wiki: 'Hywind Tampen' },
+  { name: 'Hornsea Two',     op: 'Ørsted',         lat: 53.92, lon: 1.79,  type: 'wind', note: "World's largest offshore wind farm", wiki: 'Hornsea Wind Farm' },
+  { name: 'Dogger Bank A',   op: 'SSE/Equinor',    lat: 54.85, lon: 2.40,  type: 'wind', note: 'Largest under construction', wiki: 'Dogger Bank Wind Farm' },
+  { name: 'Horns Rev 3',     op: 'Vattenfall',     lat: 55.70, lon: 7.70,  type: 'wind', wiki: 'Horns Rev' },
+  { name: 'Anholt',          op: 'Ørsted',         lat: 56.60, lon: 11.21, type: 'wind', wiki: 'Anholt Offshore Wind Farm' },
+  { name: 'Kriegers Flak',   op: 'Vattenfall',     lat: 55.00, lon: 13.10, type: 'wind', wiki: 'Kriegers Flak (wind farm)' },
+  { name: 'Borssele',        op: 'Ørsted',         lat: 51.70, lon: 3.00,  type: 'wind', wiki: 'Borssele wind farm' },
 ];
 
 // Notable lighthouses along the cruise route — pre-fetched from OSM Overpass and filtered to
@@ -552,6 +556,93 @@ const LIGHTHOUSES = [
   {"n":"Nordøyan fyr","lat":64.7985,"lon":10.5476},
   {"n":"Moholmen fyr","lat":68.1576,"lon":14.4058},
   {"n":"Torsvåg fyr","lat":70.2455,"lon":19.4999},
+];
+
+// ---- Live-position context datasets (Track Me only) ----
+// NOTE: all of the below are CURATED APPROXIMATIONS for ambient interest, not navigational data.
+// Wreck positions, seabed depths, and the coastline are rough; don't navigate by them.
+
+// Big coastal features visible from a deck, with a one-line hook. Bearing/distance computed live.
+const LANDMARKS = [
+  { n: 'Lindesnes',        lat: 57.982, lon: 7.048,  wiki: 'Lindesnes',                  blurb: 'Southernmost point of mainland Norway' },
+  { n: 'Stadlandet',       lat: 62.178, lon: 5.110,  wiki: 'Stadlandet',                 blurb: 'Exposed peninsula — roughest stretch of the Norwegian coast' },
+  { n: 'Torghatten',       lat: 65.398, lon: 12.097, wiki: 'Torghatten',                 blurb: 'Mountain with a hole bored clean through it' },
+  { n: 'The Seven Sisters',lat: 65.920, lon: 12.500, wiki: 'De syv søstre (mountains)',  blurb: 'Seven-peak massif rising from the sea' },
+  { n: 'Lofoten Wall',     lat: 68.150, lon: 13.700, wiki: 'Lofoten',                    blurb: 'Granite peaks rising straight from the water' },
+  { n: 'Trollfjord',       lat: 68.360, lon: 14.970, wiki: 'Trollfjord',                 blurb: 'Famously narrow 2km fjord' },
+  { n: 'Sumburgh Head',    lat: 59.852, lon: -1.272, wiki: 'Sumburgh Head',              blurb: 'Shetland’s southern cliffs — puffins + gannets' },
+  { n: 'Grenen (Skagen)',  lat: 57.745, lon: 10.640, wiki: 'Grenen',                     blurb: 'Sandspit where the North Sea meets the Baltic' },
+  { n: 'Rubjerg Knude',    lat: 57.449, lon: 9.775,  wiki: 'Rubjerg Knude Lighthouse',   blurb: 'Lighthouse swallowed by a migrating dune' },
+  { n: 'Heligoland',       lat: 54.182, lon: 7.885,  wiki: 'Heligoland',                 blurb: 'Red-cliffed German islet far offshore' },
+  { n: 'Møns Klint',       lat: 54.968, lon: 12.540, wiki: 'Møns Klint',                 blurb: 'White chalk cliffs of Denmark' },
+  { n: 'Flamborough Head', lat: 54.115, lon: -0.082, wiki: 'Flamborough Head',           blurb: 'Chalk headland on the English coast' },
+];
+
+// Historic shipwrecks. Positions are APPROXIMATE (some disputed/secret) — for interest only.
+const WRECKS = [
+  { n: 'HMS Invincible',    lat: 57.040, lon: 6.100, year: 1916, wiki: 'HMS Invincible (1907)',   note: 'Battle of Jutland — blew up, 1026 lost' },
+  { n: 'HMS Queen Mary',    lat: 56.920, lon: 5.870, year: 1916, wiki: 'HMS Queen Mary',           note: 'Battle of Jutland — magazine explosion' },
+  { n: 'HMS Indefatigable', lat: 56.780, lon: 5.830, year: 1916, wiki: 'HMS Indefatigable (1909)', note: 'Battle of Jutland — only 2 survived' },
+  { n: 'HMS Defence',       lat: 56.500, lon: 5.900, year: 1916, wiki: 'HMS Defence (1907)',       note: 'Battle of Jutland — lost with all hands' },
+  { n: 'SMS Lützow',        lat: 56.260, lon: 5.750, year: 1916, wiki: 'SMS Lützow (1913)',        note: 'Battle of Jutland — scuttled after damage' },
+  { n: 'SMS Wiesbaden',     lat: 56.900, lon: 6.000, year: 1916, wiki: 'SMS Wiesbaden (1915)',     note: 'Battle of Jutland — one survivor' },
+  { n: 'HMS Hampshire',     lat: 59.120, lon: -3.390, year: 1916, wiki: 'HMS Hampshire (1903)',    note: 'Mined off Orkney — Lord Kitchener drowned' },
+  { n: 'German Fleet, Scapa Flow', lat: 58.880, lon: -3.180, year: 1919, wiki: 'Scuttling of the German fleet at Scapa Flow', note: '52 warships scuttled by their own crews' },
+  { n: 'HMS Royal Oak',     lat: 58.920, lon: -2.990, year: 1939, wiki: 'HMS Royal Oak (08)',      note: 'Torpedoed at anchor — now a war grave' },
+];
+
+// Named seabed features, matched by bounding box. Depths are representative, not soundings.
+const SEABED_FEATURES = [
+  { n: 'the Norwegian Trench', lat0: 57.5, lat1: 61.5, lon0: 2.5, lon1: 6.5, depth: 300, wiki: 'Norwegian trench', note: 'deep trough hugging Norway’s coast' },
+  { n: 'the Skagerrak deep',   lat0: 57.8, lat1: 58.7, lon0: 8.3, lon1: 10.6, depth: 700, wiki: 'Skagerrak',        note: 'deepest water in the North Sea region' },
+  { n: 'Dogger Bank',          lat0: 54.2, lat1: 55.6, lon0: 1.0, lon1: 4.5, depth: 20,  wiki: 'Dogger Bank',       note: 'vast shallow sandbank' },
+  { n: 'Devil’s Hole',         lat0: 56.4, lat1: 56.75, lon0: 0.5, lon1: 1.6, depth: 230, wiki: 'Devil’s Hole (North Sea)', note: 'sudden trenches in a shallow sea' },
+  { n: 'the Long Forties',     lat0: 57.0, lat1: 58.6, lon0: 0.0, lon1: 2.0, depth: 120, wiki: 'Long Forties',      note: 'consistently ~40 fathoms deep' },
+  { n: 'the Norwegian Sea basin', lat0: 64.0, lat1: 71.0, lon0: 2.0, lon1: 12.0, depth: 3000, wiki: 'Norwegian Sea', note: 'abyssal depths off the shelf' },
+];
+
+// Coarse coastline points, each tagged with the coastal state. Used for (a) nearest-land distance
+// and (b) maritime-zone — EEZ median lines ≈ equidistant, so the nearest coast’s country is a fair
+// approximation of whose waters you’re in. Country names kept friendly for the "entering" banner.
+const COASTLINE = [
+  // England + Scotland + isles (UK)
+  {lat:51.12,lon:1.34,c:'UK'},{lat:51.40,lon:1.40,c:'UK'},{lat:51.96,lon:1.35,c:'UK'},
+  {lat:52.47,lon:1.75,c:'UK'},{lat:52.93,lon:1.30,c:'UK'},{lat:53.58,lon:0.12,c:'UK'},
+  {lat:54.49,lon:-0.61,c:'UK'},{lat:55.02,lon:-1.42,c:'UK'},{lat:55.77,lon:-2.00,c:'UK'},
+  {lat:57.14,lon:-2.09,c:'UK'},{lat:58.44,lon:-3.09,c:'UK'},{lat:58.98,lon:-2.96,c:'UK'},
+  {lat:59.85,lon:-1.28,c:'UK'},{lat:60.15,lon:-1.15,c:'UK'},{lat:60.75,lon:-0.85,c:'UK'},
+  // Netherlands
+  {lat:51.98,lon:4.12,c:'Dutch'},{lat:52.46,lon:4.58,c:'Dutch'},{lat:52.96,lon:4.76,c:'Dutch'},{lat:53.40,lon:5.33,c:'Dutch'},
+  // Germany (North Sea + Baltic)
+  {lat:53.58,lon:6.66,c:'German'},{lat:53.79,lon:7.90,c:'German'},{lat:53.87,lon:8.70,c:'German'},{lat:54.91,lon:8.30,c:'German'},
+  {lat:54.18,lon:12.10,c:'German'},{lat:54.43,lon:13.45,c:'German'},
+  // Denmark (North Sea + Baltic)
+  {lat:55.47,lon:8.45,c:'Danish'},{lat:56.00,lon:8.13,c:'Danish'},{lat:57.12,lon:8.62,c:'Danish'},
+  {lat:57.59,lon:9.96,c:'Danish'},{lat:57.72,lon:10.58,c:'Danish'},{lat:55.10,lon:14.92,c:'Danish'},
+  {lat:55.70,lon:12.60,c:'Danish'},{lat:54.57,lon:11.93,c:'Danish'},
+  // Norway (south + west coast up to Vesterålen)
+  {lat:57.98,lon:7.05,c:'Norwegian'},{lat:58.08,lon:8.00,c:'Norwegian'},{lat:58.45,lon:5.99,c:'Norwegian'},
+  {lat:58.97,lon:5.73,c:'Norwegian'},{lat:59.41,lon:5.27,c:'Norwegian'},{lat:60.39,lon:5.32,c:'Norwegian'},
+  {lat:61.60,lon:5.03,c:'Norwegian'},{lat:62.47,lon:6.15,c:'Norwegian'},{lat:63.11,lon:7.73,c:'Norwegian'},
+  {lat:63.70,lon:9.61,c:'Norwegian'},{lat:64.86,lon:11.24,c:'Norwegian'},{lat:67.28,lon:14.40,c:'Norwegian'},
+  {lat:68.15,lon:13.61,c:'Norwegian'},{lat:68.23,lon:14.57,c:'Norwegian'},{lat:68.70,lon:15.42,c:'Norwegian'},{lat:69.32,lon:16.12,c:'Norwegian'},
+  // Sweden (west + Baltic)
+  {lat:57.70,lon:11.97,c:'Swedish'},{lat:57.11,lon:12.25,c:'Swedish'},{lat:59.33,lon:18.40,c:'Swedish'},
+  {lat:58.74,lon:17.87,c:'Swedish'},{lat:59.76,lon:19.40,c:'Swedish'},
+  // Estonia + Finland
+  {lat:59.44,lon:24.75,c:'Estonian'},{lat:58.25,lon:22.20,c:'Estonian'},{lat:58.92,lon:22.60,c:'Estonian'},{lat:59.82,lon:22.95,c:'Finnish'},
+  // France (Channel approaches)
+  {lat:51.04,lon:2.38,c:'French'},{lat:50.73,lon:1.61,c:'French'},
+];
+
+// Named sea regions by bounding box; first match wins, so order matters (specific → broad).
+const SEAS = [
+  { n: 'the English Channel', lat0: 49.5, lat1: 51.2, lon0: -1.5, lon1: 2.2 },
+  { n: 'the Skagerrak',       lat0: 57.3, lat1: 58.7, lon0: 7.0,  lon1: 11.0 },
+  { n: 'the Kattegat',        lat0: 56.0, lat1: 57.8, lon0: 10.0, lon1: 12.8 },
+  { n: 'the Baltic Sea',      lat0: 53.5, lat1: 60.5, lon0: 12.0, lon1: 28.0 },
+  { n: 'the Norwegian Sea',   lat0: 62.0, lat1: 71.0, lon0: -2.0, lon1: 16.0 },
+  { n: 'the North Sea',       lat0: 51.0, lat1: 62.0, lon0: -4.0, lon1: 9.5 },
 ];
 
 const WMO = {
@@ -759,7 +850,9 @@ async function fetchWildlife(lat, lon, radiusKm = 50, days = 30) {
   } catch { return []; }
 }
 
-// Collapse multiple observations to one entry per species, keeping the most recent + taxon id for linking.
+// Collapse multiple observations to one entry per species, keeping the most recent.
+// Captures the observation id (to link straight to the actual sighting) and its quality
+// grade so we can flag unconfirmed (needs_id) records vs community-verified (research) ones.
 function dedupeWildlife(observations, queryLat, queryLon) {
   const bySpecies = {};
   for (const obs of observations) {
@@ -770,7 +863,8 @@ function dedupeWildlife(observations, queryLat, queryLon) {
     if (!bySpecies[name] || date > bySpecies[name].date) {
       const coords = obs.geojson?.coordinates;
       const distMi = coords ? Math.round(kmToMi(haversineKm(queryLat, queryLon, coords[1], coords[0]))) : null;
-      bySpecies[name] = { name, date, distMi, taxonId };
+      bySpecies[name] = { name, date, distMi, taxonId, obsId: obs.id,
+        unconfirmed: obs.quality_grade !== 'research' };
     }
   }
   return Object.values(bySpecies).sort((a,b) => b.date.localeCompare(a.date));
@@ -962,10 +1056,16 @@ function discoveriesHTML(p, wildlife, birds, isSeaDay = false) {
     const top = wildlife.slice(0, 4);
     const list = top.map(w => {
       const inner = `<em>${w.name}</em>`;
-      const linked = w.taxonId
-        ? `<a href="https://www.inaturalist.org/taxa/${w.taxonId}" target="_blank" rel="noopener">${inner}</a>`
+      // Link straight to the actual observation so you can verify it (photo, observer, exact spot).
+      // Fall back to the species page only if the observation id is missing.
+      const href = w.obsId
+        ? `https://www.inaturalist.org/observations/${w.obsId}`
+        : (w.taxonId ? `https://www.inaturalist.org/taxa/${w.taxonId}` : null);
+      const linked = href
+        ? `<a href="${href}" target="_blank" rel="noopener">${inner}</a>`
         : inner;
-      return `${linked} <span class="dim">(${fmtAge(w.date)}${w.distMi != null ? `, ${w.distMi}mi` : ''})</span>`;
+      const flag = w.unconfirmed ? ` <span class="unconfirmed" title="Identification not yet community-verified on iNaturalist">⚠ unconfirmed</span>` : '';
+      return `${linked}${flag} <span class="dim">(${fmtAge(w.date)}${w.distMi != null ? `, ${w.distMi}mi` : ''})</span>`;
     }).join(' · ');
     lines.push(`<div class="disc-line"><span class="disc-icon">🐋</span><span class="disc-body">${list}</span></div>`);
   } else if (wildlife != null) {
@@ -987,7 +1087,13 @@ function discoveriesHTML(p, wildlife, birds, isSeaDay = false) {
   if (plats.length) {
     const list = plats.map(pl => {
       const typeIcon = pl.type === 'wind' ? '🌬️' : '🛢️';
-      return `${typeIcon} <em>${pl.name}</em> <span class="dim">${pl.distMi}mi</span>`;
+      // Deep-link to the Wikipedia article when we have a confident title; otherwise let
+      // Wikipedia search resolve it (exact matches auto-redirect to the article).
+      const wikiUrl = pl.wiki
+        ? `https://en.wikipedia.org/wiki/${encodeURIComponent(pl.wiki.replace(/ /g, '_'))}`
+        : `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(pl.name + ' ' + pl.op)}`;
+      const linked = `<a href="${wikiUrl}" target="_blank" rel="noopener"><em>${pl.name}</em></a>`;
+      return `${typeIcon} ${linked} <span class="dim">${pl.distMi}mi</span>`;
     }).join(' · ');
     lines.push(`<div class="disc-line"><span class="disc-icon">📍</span><span class="disc-body">${list}</span></div>`);
   }
@@ -1448,7 +1554,15 @@ async function refreshAll(force = false) {
 let LIVE_POS = null;          // current { lat, lon, accuracy, speed, heading, ts }
 let LIVE_HISTORY = [];        // last few readings (for course estimation)
 let WATCH_ID = null;
+let LAST_ZONE = null;         // last maritime zone seen — drives the "entering X waters" banner
 const KM_TO_NM = 0.539957;
+
+// Direct Wikipedia article when we have a title; else a search that resolves exact matches.
+function wikiHref(title, fallbackQuery) {
+  return title
+    ? `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`
+    : `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(fallbackQuery)}`;
+}
 
 function bearingDeg(lat1, lon1, lat2, lon2) {
   const rad = Math.PI / 180;
@@ -1485,6 +1599,42 @@ function bearingLabel(targetLat, targetLon) {
   const course = shipCourse();
   if (course != null) return nauticalRelative(((tb - course) % 360 + 360) % 360);
   return cardinalDir(tb);
+}
+
+// Generic "nearest N from live position within maxKm", sorted by distance — the LANDMARKS/WRECKS pattern.
+function nearFromLive(list, maxKm, limit) {
+  const out = [];
+  for (const item of list) {
+    const distKm = haversineKm(LIVE_POS.lat, LIVE_POS.lon, item.lat, item.lon);
+    if (distKm <= maxKm) out.push({ ...item, distKm });
+  }
+  return out.sort((a, b) => a.distKm - b.distKm).slice(0, limit);
+}
+
+// Nearest coastline point: distance, bearing, and the coastal state (for the maritime zone).
+function nearestLand() {
+  let best = null;
+  for (const p of COASTLINE) {
+    const d = haversineKm(LIVE_POS.lat, LIVE_POS.lon, p.lat, p.lon);
+    if (!best || d < best.distKm) best = { distKm: d, lat: p.lat, lon: p.lon, c: p.c };
+  }
+  return best;
+}
+
+// Named sea region containing the point, or null over none of the boxes.
+function seaRegion(lat, lon) {
+  for (const s of SEAS) {
+    if (lat >= s.lat0 && lat <= s.lat1 && lon >= s.lon0 && lon <= s.lon1) return s.n;
+  }
+  return null;
+}
+
+// Named seabed feature under the point, if any.
+function seabedAt(lat, lon) {
+  for (const f of SEABED_FEATURES) {
+    if (lat >= f.lat0 && lat <= f.lat1 && lon >= f.lon0 && lon <= f.lon1) return f;
+  }
+  return null;
 }
 
 function startTracking() {
@@ -1526,9 +1676,10 @@ function stopTracking(keepErrorMsg = false) {
   }
   LIVE_POS = null;
   LIVE_HISTORY = [];
+  LAST_ZONE = null;
   const btn = document.getElementById('track-me');
   btn.setAttribute('aria-pressed', 'false');
-  btn.textContent = '📍 Track me';
+  btn.textContent = "📍 What's around me?";
   if (!keepErrorMsg) {
     const s = document.getElementById('live-status');
     s.classList.remove('on');
@@ -1585,6 +1736,39 @@ function renderLiveCard() {
     ? `<div class="disc-line"><span class="disc-icon">🗼</span><span class="disc-body"><button class="lighthouses-trigger"><em>${lhs.length} lighthouse${lhs.length === 1 ? '' : 's'} within 13nm</em> <span class="dim">→ tap for gallery</span></button></span></div>`
     : `<div class="disc-line"><span class="disc-icon">🗼</span><span class="disc-body dim">No notable lighthouses within 13nm</span></div>`;
 
+  // Maritime zone (whose waters) — nearest coast's country; flag the moment it changes.
+  const land = nearestLand();
+  const entering = LAST_ZONE && LAST_ZONE !== land.c;
+  const zoneLine = `<div class="disc-line"><span class="disc-icon">🏴</span><span class="disc-body${entering ? '' : ' dim'}">${
+    entering ? `<em class="zone-enter">Now entering ${land.c} waters</em>` : `In ${land.c} waters`}</span></div>`;
+  LAST_ZONE = land.c;
+
+  // Nearest land + which sea you're crossing.
+  const sea = seaRegion(LIVE_POS.lat, LIVE_POS.lon);
+  const seaTail = sea ? ` — ${land.distKm > 75 ? 'open ' : ''}${sea}` : '';
+  const landLine = `<div class="disc-line"><span class="disc-icon">🌊</span><span class="disc-body">Nearest land <em>${nmStr(land.distKm)}nm</em> <span class="dim">${bearingLabel(land.lat, land.lon)}</span>${seaTail}</span></div>`;
+
+  // Seabed feature under the keel (only when over a named one — no fake precision otherwise).
+  const feat = seabedAt(LIVE_POS.lat, LIVE_POS.lon);
+  const depthLine = feat
+    ? `<div class="disc-line"><span class="disc-icon">🔻</span><span class="disc-body">Over <a href="${wikiHref(feat.wiki, feat.n)}" target="_blank" rel="noopener"><em>${feat.n}</em></a> <span class="dim">~${feat.depth}m · ${feat.note}</span></span></div>`
+    : '';
+
+  // Coastal landmarks — big features seen from a deck (40nm), and historic wrecks passing close (16nm).
+  const marks = nearFromLive(LANDMARKS, 75, 3);
+  const markLine = marks.length
+    ? `<div class="disc-line"><span class="disc-icon">🏔️</span><span class="disc-body">${marks.map(m =>
+        `<a href="${wikiHref(m.wiki, m.n)}" target="_blank" rel="noopener" title="${m.blurb}"><em>${m.n}</em></a> <span class="dim">${nmStr(m.distKm)}nm ${bearingLabel(m.lat, m.lon)}</span>`
+      ).join(' · ')}</span></div>`
+    : '';
+
+  const wrecks = nearFromLive(WRECKS, 30, 3);
+  const wreckLine = wrecks.length
+    ? `<div class="disc-line"><span class="disc-icon">⚓</span><span class="disc-body">${wrecks.map(w =>
+        `<a href="${wikiHref(w.wiki, w.n)}" target="_blank" rel="noopener" title="${w.note}"><em>${w.n}</em></a> <span class="dim">${nmStr(w.distKm)}nm ${bearingLabel(w.lat, w.lon)} · ${w.year}</span>`
+      ).join(' · ')}</span></div>`
+    : '';
+
   const knots = (LIVE_POS.speed != null && LIVE_POS.speed > 0.1)
     ? (LIVE_POS.speed * 1.94384).toFixed(1) + ' kt'
     : 'stationary';
@@ -1602,8 +1786,13 @@ function renderLiveCard() {
       </div>
     </div>
     <div class="discoveries">
+      ${zoneLine}
+      ${landLine}
+      ${depthLine}
       ${lhLine}
       ${platLine}
+      ${markLine}
+      ${wreckLine}
     </div>
   `;
 }
@@ -1850,7 +2039,7 @@ function main() {
       stopTracking();
     } else {
       trackBtn.setAttribute('aria-pressed', 'true');
-      trackBtn.textContent = '📍 Tracking…';
+      trackBtn.textContent = '📍 Tap to stop';
       startTracking();
     }
   });
