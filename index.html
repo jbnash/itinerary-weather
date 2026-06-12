@@ -135,21 +135,13 @@
   .cond { color: var(--muted); font-size: 11.5px; margin-top: 1px; }
   .meta { display: flex; gap: 10px; font-size: 10.5px; color: var(--muted); flex-wrap: wrap; margin-top: 3px; }
   .meta .wave { color: var(--wave); }
+  .meta .feels { color: var(--lo); }
   .sun {
     display: flex; gap: 10px; font-size: 11px; color: var(--muted); flex-wrap: wrap;
     padding: 0 2px;
   }
   .sun .midnight { color: #ffd479; font-weight: 600; }
   .sun .polar { color: #9ec7ff; font-weight: 600; }
-  .forecast { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
-  .day {
-    display: flex; flex-direction: column; align-items: center; gap: 2px;
-    font-size: 10.5px; color: var(--muted); text-align: center;
-    padding: 4px 0; border-radius: 6px;
-  }
-  .day .d-icon { font-size: 16px; }
-  .day .d-hi { color: var(--hi); font-weight: 600; font-size: 11.5px; }
-  .day .d-lo { color: var(--lo); font-size: 11px; }
   .hourly-wrap {
     border-top: 1px solid var(--line);
     padding-top: 8px;
@@ -452,6 +444,22 @@ const LOOK_FOR = {
   '2026-07-09': '🛢️ Crossing back through the North Sea oil belt — Forties, Brent, Ekofisk fields to the north. Last chance for orca sightings.',
   '2026-07-10': '🏰 White cliffs again. The Roman pharos on the cliffs is the world\'s oldest standing lighthouse.',
   '2026-07-11': '⚓ End of cruise. Final views of Europoort, container cranes, and the Maeslantkering storm-surge barrier.',
+};
+
+// Other cruise ships sharing each port on our dates — our own Nieuw Statendam is excluded.
+// Snapshot from cruisetimetables.com on 2026-06-12. Schedules can change and the source may
+// not list every vessel, so treat as a heads-up, not a guarantee. Keyed by port date (ISO);
+// port-days with no other ships listed are simply omitted (we don't claim "you're alone").
+const PORT_SHIPS = {
+  '2026-06-16': [{ ship: 'MSC Virtuosa', line: 'MSC', arr: '11:00', dep: '20:00', pax: 4888 }],                 // Måløy
+  '2026-06-17': [{ ship: 'AIDAbella', line: 'AIDA', arr: '09:00', dep: '17:00', pax: 2030 }],                   // Trondheim
+  '2026-06-19': [{ ship: 'Europa', line: 'Hapag-Lloyd', arr: '09:00', dep: '19:00', pax: 408 }],                // Leknes
+  '2026-06-21': [{ ship: 'Sky Princess', line: 'Princess', arr: '10:00', dep: '18:30', pax: 3660 }],            // Honningsvåg
+  '2026-06-24': [{ ship: 'Bolette', line: 'Fred Olsen', pax: 1338 }],                                           // Lerwick
+  '2026-07-03': [{ ship: 'Europa', line: 'Hapag-Lloyd', arr: '07:00', dep: '24:00', pax: 408 },
+                 { ship: 'Viking Sky', line: 'Viking', pax: 930 }],                                             // Tallinn
+  '2026-07-08': [{ ship: 'Aurora', line: 'P&O', pax: 1874 }],                                                   // Oslo
+  '2026-07-10': [{ ship: 'Carnival Legend', line: 'Carnival', arr: '05:00', dep: '16:30', pax: 2124 }],         // Dover
 };
 
 // Major offshore installations near the cruise route. Curated, not exhaustive.
@@ -796,8 +804,8 @@ function platformsNear(coords, maxKm) {
 async function fetchForecast(p, withHourly = false) {
   const hourly = withHourly ? '&hourly=temperature_2m,weather_code,precipitation_probability,wind_speed_10m' : '';
   const u = `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}` +
-    `&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m,uv_index` +
-    `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max` +
+    `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,uv_index` +
+    `&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_probability_max,uv_index_max` +
     hourly +
     `&timezone=auto&forecast_days=16&wind_speed_unit=mph&temperature_unit=fahrenheit`;
   const r = await fetch(u);
@@ -810,7 +818,7 @@ async function fetchForecastMulti(coords) {
   const lats = coords.map(c => c[0]).join(',');
   const lons = coords.map(c => c[1]).join(',');
   const u = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}` +
-    `&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,precipitation_probability_max,uv_index_max` +
+    `&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,wind_speed_10m_max,precipitation_probability_max,uv_index_max` +
     `&timezone=auto&forecast_days=16&wind_speed_unit=mph&temperature_unit=fahrenheit`;
   const r = await fetch(u);
   if (!r.ok) throw new Error('route weather failed');
@@ -987,6 +995,18 @@ function uvBadge(uv) {
   return `<span class="${cls}">☀ UV ${v} ${label}</span>`;
 }
 
+// "Feels like" / wind-chill chip from Open-Meteo apparent temperature (°F).
+function feelsChip(f) {
+  if (f == null) return '';
+  return `<span class="feels">🌡️ Feels like ${Math.round(f)}°</span>`;
+}
+function feelsChipRange(lo, hi) {
+  if (lo == null || hi == null) return '';
+  const a = Math.round(lo), b = Math.round(hi);
+  const s = b - a <= 1 ? `${b}°` : `${a}–${b}°`;
+  return `<span class="feels">🌡️ Feels like ${s}</span>`;
+}
+
 const seaState = ft => {
   if (ft == null) return '';
   if (ft < 1) return 'Calm';
@@ -1050,6 +1070,16 @@ function sunHTML(p) {
 
 function discoveriesHTML(p, wildlife, birds, isSeaDay = false) {
   const lines = [];
+
+  // 0. Other cruise ships sharing the port that day (baked schedule; excludes our own ship)
+  const ships = PORT_SHIPS[p.d];
+  if (ships && ships.length) {
+    const list = ships.map(s => {
+      const time = (s.arr && s.dep) ? ` <span class="dim">${s.arr}–${s.dep}</span>` : '';
+      return `<em>${s.ship}</em> <span class="dim">(${s.line})</span>${time}`;
+    }).join(' · ');
+    lines.push(`<div class="disc-line"><span class="disc-icon">🚢</span><span class="disc-body">Also in port: ${list}</span></div>`);
+  }
 
   // 1a. Marine mammals (iNaturalist, last 30 days)
   if (wildlife && wildlife.length) {
@@ -1133,43 +1163,35 @@ function waveLineHTML(marine, dateISO) {
 function renderForecast(card, p, data, marine, isNext, wildlife, birds) {
   const w = card.querySelector('.weather');
   const portDateIdx = data?.daily?.time?.indexOf(p.d) ?? -1;
-  const startIdx = portDateIdx >= 0 ? portDateIdx : 0;
-  const endIdx = Math.min(startIdx + 5, data.daily.time.length);
-  const days = [];
-  for (let i = startIdx; i < endIdx; i++) {
-    days.push({
-      date: data.daily.time[i],
-      code: data.daily.weather_code[i],
-      hi:   Math.round(data.daily.temperature_2m_max[i]),
-      lo:   Math.round(data.daily.temperature_2m_min[i]),
-      pop:  data.daily.precipitation_probability_max?.[i] ?? null,
-    });
-  }
+  const di = portDateIdx >= 0 ? portDateIdx : 0;
   const cur = data.current;
   const [curIcon, curLabel] = wmo(cur.weather_code);
   const isFuture = portDateIdx > 0;
   const wave = waveLineHTML(marine, p.d);
 
   let curHTML;
-  if (isFuture && days.length) {
-    const d0 = days[0];
-    const [dIcon, dLabel] = wmo(d0.code);
-    const tp = tempPair(d0.hi, d0.lo);
-    const d0Uv = data.daily.uv_index_max?.[portDateIdx >= 0 ? portDateIdx : 0];
-    const uv = uvBadge(d0Uv);
+  if (isFuture) {
+    const [dIcon, dLabel] = wmo(data.daily.weather_code[di]);
+    const hi = Math.round(data.daily.temperature_2m_max[di]);
+    const lo = Math.round(data.daily.temperature_2m_min[di]);
+    const pop = data.daily.precipitation_probability_max?.[di] ?? null;
+    const tp = tempPair(hi, lo);
+    const uv = uvBadge(data.daily.uv_index_max?.[di]);
+    const feels = feelsChipRange(data.daily.apparent_temperature_min?.[di], data.daily.apparent_temperature_max?.[di]);
     curHTML = `
       <div class="current">
         <div class="icon">${dIcon}</div>
         <div style="flex:1">
           <div class="temp">${tp.f}</div>
           <div class="temp-c">${tp.c}</div>
-          <div class="cond">${dLabel}${d0.pop != null ? ` · ${d0.pop}% precip` : ''}</div>
-          ${(wave || uv) ? `<div class="meta">${uv}${wave}</div>` : ''}
+          <div class="cond">${dLabel}${pop != null ? ` · ${pop}% precip` : ''}</div>
+          ${(feels || uv || wave) ? `<div class="meta">${feels}${uv}${wave}</div>` : ''}
         </div>
       </div>`;
   } else {
     const tp = tempPair(cur.temperature_2m);
     const uv = uvBadge(cur.uv_index);
+    const feels = feelsChip(cur.apparent_temperature);
     curHTML = `
       <div class="current">
         <div class="icon">${curIcon}</div>
@@ -1179,6 +1201,7 @@ function renderForecast(card, p, data, marine, isNext, wildlife, birds) {
           <div class="cond">${curLabel}</div>
           <div class="meta">
             <span>💨 ${Math.round(cur.wind_speed_10m)} mph</span>
+            ${feels}
             <span>💧 ${cur.relative_humidity_2m}%</span>
             ${uv}
             ${wave}
@@ -1187,62 +1210,75 @@ function renderForecast(card, p, data, marine, isNext, wildlife, birds) {
       </div>`;
   }
 
-  const stripHTML = `
-    <div class="forecast">
-      ${days.map(d => {
-        const [ic] = wmo(d.code);
-        const lbl = new Date(d.date+'T00:00:00').toLocaleDateString(undefined, { weekday:'short' });
-        return `<div class="day">
-          <div>${lbl}</div>
-          <div class="d-icon">${ic}</div>
-          <div class="d-hi">${d.hi}°</div>
-          <div class="d-lo">${d.lo}°</div>
-        </div>`;
-      }).join('')}
-    </div>`;
-
-  const hourlyHTML = isNext ? renderHourlyHTML(p, data) : '';
+  // Each port stop is a single day — show that day's hour-by-hour forecast, not a multi-day strip.
+  const hourlyHTML = renderHourlyHTML(p, data);
   const discHTML = discoveriesHTML(p, wildlife, birds, false);
 
-  w.innerHTML = curHTML + sunHTML(p) + stripHTML + discHTML + hourlyHTML;
+  w.innerHTML = curHTML + sunHTML(p) + hourlyHTML + discHTML;
 }
 
+// Hour label from an Open-Meteo local-time string ("2026-06-13T06:00"). The API returns port-local
+// time (timezone=auto), so read the hour straight from the string rather than reinterpreting it
+// through the browser's timezone — which would shift every label when the device isn't in the port's zone.
+function fmtHourLabel(iso) {
+  const h = parseInt(iso.slice(11, 13), 10);
+  const ampm = h < 12 ? 'AM' : 'PM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}${ampm}`;
+}
+
+// Parse an itinerary clock string ("7:00 AM", "4:00 PM", "—") to an hour int 0–23, or null.
+function parseClock(s) {
+  const m = s && /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(s.trim());
+  if (!m) return null;
+  let h = parseInt(m[1], 10) % 12;
+  if (/pm/i.test(m[3])) h += 12;
+  return h;
+}
+
+// Hourly forecast bounded to the actual time in port (arrival → departure): no overnight hours,
+// no cells before we dock. Falls back to a daytime window if arr/dep aren't set (e.g. embark day).
 function renderHourlyHTML(p, data) {
   if (!data?.hourly?.time) return '';
   const times = data.hourly.time;
-  const now = new Date();
-  // Find first hour at-or-after now; on the port date, start at 6am local if port date is future
-  const portDate = new Date(p.d + 'T00:00:00');
-  const isPortToday = portDate.getTime() === TODAY.getTime();
-  let startIdx;
+
+  let startH = parseClock(p.arr);
+  let endH = parseClock(p.dep);
+  if (startH == null) startH = 8;
+  if (endH == null || endH <= startH) endH = Math.min(startH + 10, 21);
+
+  // On the port day itself, advance past hours already elapsed so the strip stays forward-looking.
+  const isPortToday = new Date(p.d + 'T00:00:00').getTime() === TODAY.getTime();
   if (isPortToday) {
-    startIdx = times.findIndex(t => new Date(t) >= now);
-    if (startIdx < 0) startIdx = 0;
-  } else {
-    // Future port: start at port-day 06:00
-    const target = p.d + 'T06:00';
-    startIdx = times.findIndex(t => t.startsWith(target));
-    if (startIdx < 0) startIdx = times.findIndex(t => t.startsWith(p.d));
-    if (startIdx < 0) startIdx = 0;
+    const now = new Date();
+    const nowSlot = times.find(t => t.startsWith(p.d) && new Date(t) >= now);
+    if (nowSlot) startH = Math.max(startH, parseInt(nowSlot.slice(11, 13), 10));
   }
-  // 8 columns, every 3 hours = 24 hour span
-  const cells = [];
-  for (let k = 0; k < 8; k++) {
-    const i = startIdx + k * 3;
-    if (i >= times.length) break;
-    const dt = new Date(times[i]);
+  if (startH > endH) return '';   // in-port window already elapsed
+
+  const span = endH - startH;
+  const step = span <= 8 ? 1 : (span <= 14 ? 2 : 3);
+  const hours = [];
+  for (let h = startH; h < endH; h += step) hours.push(h);
+  hours.push(endH);               // always bracket the departure hour
+
+  const cells = hours.map(h => {
+    const i = times.indexOf(`${p.d}T${String(h).padStart(2, '0')}:00`);
+    if (i < 0) return null;
     const [ic] = wmo(data.hourly.weather_code[i]);
-    cells.push({
-      label: dt.toLocaleTimeString(undefined, { hour:'numeric', timeZone: p.tz }).replace(' ', ''),
+    return {
+      label: fmtHourLabel(times[i]),
       icon: ic,
       t: Math.round(data.hourly.temperature_2m[i]),
       pop: data.hourly.precipitation_probability?.[i] ?? null,
-    });
-  }
+    };
+  }).filter(Boolean);
+  if (!cells.length) return '';
+
   return `
     <div class="hourly-wrap">
-      <div class="hourly-title">Next 24h</div>
-      <div class="hourly">
+      <div class="hourly-title">Hour by hour in port</div>
+      <div class="hourly" style="grid-template-columns:repeat(${cells.length},1fr)">
         ${cells.map(c => `<div class="hr">
           <div>${c.label}</div>
           <div class="h-icon">${c.icon}</div>
@@ -1278,7 +1314,7 @@ function renderNormal(card, p, wildlife, birds) {
 }
 
 function aggregateRoute(arr, dateISO) {
-  const codes = [], his = [], los = [], pops = [], winds = [], uvs = [];
+  const codes = [], his = [], los = [], pops = [], winds = [], uvs = [], fHis = [], fLos = [];
   arr.forEach(d => {
     const idx = d?.daily?.time?.indexOf(dateISO);
     if (idx == null || idx < 0) return;
@@ -1289,6 +1325,10 @@ function aggregateRoute(arr, dateISO) {
     winds.push(d.daily.wind_speed_10m_max?.[idx] ?? 0);
     const uv = d.daily.uv_index_max?.[idx];
     if (uv != null) uvs.push(uv);
+    const fh = d.daily.apparent_temperature_max?.[idx];
+    const fl = d.daily.apparent_temperature_min?.[idx];
+    if (fh != null) fHis.push(fh);
+    if (fl != null) fLos.push(fl);
   });
   if (!codes.length) return null;
   // Pick the most common weather code as representative; track if any waypoint is markedly worse.
@@ -1303,6 +1343,7 @@ function aggregateRoute(arr, dateISO) {
     pop: Math.max(...pops),
     wind: { min: Math.min(...winds), max: Math.max(...winds) },
     uv: uvs.length ? Math.max(...uvs) : null,
+    feels: (fLos.length && fHis.length) ? { min: Math.min(...fLos), max: Math.max(...fHis) } : null,
   };
 }
 
@@ -1343,27 +1384,7 @@ function renderSeaRoute(card, p, route, agg, marineAgg, data0, wildlife, birds) 
     ? `<span class="wave">🌊 ${fmtWaveRange(marineAgg)} · ${seaState(mToFt(marineAgg.maxM))}${marineAgg.avgPeriod ? ' · ' + Math.round(marineAgg.avgPeriod) + 's between crests' : ''}</span>`
     : '';
 
-  // Reuse the 5-day strip from the first waypoint's daily data so the card still shows the trip context.
-  let stripHTML = '';
-  if (data0?.daily) {
-    const portIdx = data0.daily.time.indexOf(p.d);
-    const startIdx = portIdx >= 0 ? portIdx : 0;
-    const endIdx = Math.min(startIdx + 5, data0.daily.time.length);
-    const days = [];
-    for (let i = startIdx; i < endIdx; i++) {
-      days.push({
-        date: data0.daily.time[i],
-        code: data0.daily.weather_code[i],
-        hi: Math.round(data0.daily.temperature_2m_max[i]),
-        lo: Math.round(data0.daily.temperature_2m_min[i]),
-      });
-    }
-    stripHTML = `<div class="forecast">${days.map(d => {
-      const [ic] = wmo(d.code);
-      const lbl = new Date(d.date+'T00:00:00').toLocaleDateString(undefined, { weekday:'short' });
-      return `<div class="day"><div>${lbl}</div><div class="d-icon">${ic}</div><div class="d-hi">${d.hi}°</div><div class="d-lo">${d.lo}°</div></div>`;
-    }).join('')}</div>`;
-  }
+  const feels = feelsChipRange(agg.feels?.min, agg.feels?.max);
 
   w.innerHTML = `
     <div class="route-line">↝ ${route.label} <span class="waters">· ${route.waters}</span></div>
@@ -1375,13 +1396,13 @@ function renderSeaRoute(card, p, route, agg, marineAgg, data0, wildlife, birds) 
         <div class="cond">${label} · ${agg.pop}% precip</div>
         <div class="meta">
           <span>💨 ${fmtRange(agg.wind, '')} mph</span>
+          ${feels}
           ${uv}
           ${wave}
         </div>
       </div>
     </div>
     ${sunHTML(p)}
-    ${stripHTML}
     ${discoveriesHTML(p, wildlife, birds, true)}
   `;
 }
@@ -1403,6 +1424,7 @@ function renderSea(card, p, data, marine, wildlife, birds) {
   const lo = data.daily.temperature_2m_min[idx];
   const tp = tempPair(hi, lo);
   const uv = uvBadge(data.daily.uv_index_max?.[idx]);
+  const feels = feelsChipRange(data.daily.apparent_temperature_min?.[idx], data.daily.apparent_temperature_max?.[idx]);
   w.innerHTML = `
     <div class="current">
       <div class="icon">${icon}</div>
@@ -1410,7 +1432,7 @@ function renderSea(card, p, data, marine, wildlife, birds) {
         <div class="temp">${tp.f}</div>
         <div class="temp-c">${tp.c}</div>
         <div class="cond">${label} · open water</div>
-        ${(wave || uv) ? `<div class="meta">${uv}${wave}</div>` : ''}
+        ${(feels || wave || uv) ? `<div class="meta">${feels}${uv}${wave}</div>` : ''}
       </div>
     </div>
     ${sunHTML(p)}
@@ -1464,7 +1486,7 @@ async function loadWeatherFor(p, card, idx, isNext) {
     if (du < 0) { renderNormal(card, p, wildlife, birds); return; }
     if (du < FORECAST_HORIZON) {
       const [data, marine] = await Promise.all([
-        fetchForecast(p, isNext),
+        fetchForecast(p, true),
         du < MARINE_HORIZON ? fetchMarine(p) : Promise.resolve(null),
       ]);
       renderForecast(card, p, data, marine, isNext, wildlife, birds);
@@ -1472,7 +1494,10 @@ async function loadWeatherFor(p, card, idx, isNext) {
       renderNormal(card, p, wildlife, birds);
     }
   } catch (e) {
-    card.querySelector('.weather').innerHTML = `<div class="err">Couldn't load weather — ${e.message}</div>${sunHTML(p)}`;
+    // Weather is the only network-dependent part — still show sun times + baked discoveries
+    // (other ships, curated notes, platforms) so a transient fetch failure doesn't blank the card.
+    card.querySelector('.weather').innerHTML =
+      `<div class="err">Couldn't load weather — ${e.message}</div>${sunHTML(p)}${discoveriesHTML(p, wildlife, birds, p.sea)}`;
   }
 }
 
