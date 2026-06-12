@@ -1075,8 +1075,9 @@ function discoveriesHTML(p, wildlife, birds, isSeaDay = false) {
   const ships = PORT_SHIPS[p.d];
   if (ships && ships.length) {
     const list = ships.map(s => {
-      const time = (s.arr && s.dep) ? ` <span class="dim">${s.arr}–${s.dep}</span>` : '';
-      return `<em>${s.ship}</em> <span class="dim">(${s.line})</span>${time}`;
+      const pax = s.pax ? ` · ${s.pax.toLocaleString()} guests` : '';
+      const time = (s.arr && s.dep) ? ` · ${s.arr}–${s.dep}` : '';
+      return `<em>${s.ship}</em> <span class="dim">(${s.line})${pax}${time}</span>`;
     }).join(' · ');
     lines.push(`<div class="disc-line"><span class="disc-icon">🚢</span><span class="disc-body">Also in port: ${list}</span></div>`);
   }
