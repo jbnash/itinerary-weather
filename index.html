@@ -1121,9 +1121,7 @@ function discoveriesHTML(p, wildlife, birds, isSeaDay = false) {
       const typeIcon = pl.type === 'wind' ? '🌬️' : '🛢️';
       // Deep-link to the Wikipedia article when we have a confident title; otherwise let
       // Wikipedia search resolve it (exact matches auto-redirect to the article).
-      const wikiUrl = pl.wiki
-        ? `https://en.wikipedia.org/wiki/${encodeURIComponent(pl.wiki.replace(/ /g, '_'))}`
-        : `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(pl.name + ' ' + pl.op)}`;
+      const wikiUrl = wikiHref(pl.wiki, pl.name + ' ' + pl.op);
       const linked = `<a href="${wikiUrl}" target="_blank" rel="noopener"><em>${pl.name}</em></a>`;
       return `${typeIcon} ${linked} <span class="dim">${pl.distMi}mi</span>`;
     }).join(' · ');
@@ -1585,10 +1583,13 @@ let WATCH_ID = null;
 let LAST_ZONE = null;         // last maritime zone seen — drives the "entering X waters" banner
 const KM_TO_NM = 0.539957;
 
-// Direct Wikipedia article when we have a title; else a search that resolves exact matches.
+// Browser-safe Wikipedia link. Uses /w/index.php, NOT /wiki/<title>: the /wiki/ path is claimed by
+// the Wikipedia iOS app's Universal Links, which hijacks the tap and fails on flaky ship wifi
+// ("WMF.requestError error 0"). /w/ is not claimed (per Wikipedia's apple-app-site-association),
+// so the link opens in the browser instead.
 function wikiHref(title, fallbackQuery) {
   return title
-    ? `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`
+    ? `https://en.wikipedia.org/w/index.php?title=${encodeURIComponent(title.replace(/ /g, '_'))}`
     : `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(fallbackQuery)}`;
 }
 
@@ -1884,7 +1885,7 @@ function populateLighthouseModal() {
   body.innerHTML = `<div class="bird-grid">${lhs.map(l => {
     const dir = bearingLabel(l.lat, l.lon);
     const nm = (l.distKm * KM_TO_NM).toFixed(1);
-    return `<a class="bird-tile" href="https://en.wikipedia.org/wiki/${encodeURIComponent(l.n.replace(/ /g, '_'))}" target="_blank" rel="noopener">
+    return `<a class="bird-tile" href="${wikiHref(l.n, l.n)}" target="_blank" rel="noopener">
       <div class="photo-wrap" data-name="${l.n.replace(/"/g, '&quot;')}">🗼</div>
       <div class="name">${l.n}</div>
       <div class="meta">${nm}nm · ${dir}</div>
