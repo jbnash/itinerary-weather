@@ -344,6 +344,20 @@
   </div>
 </div>
 
+<div class="modal" id="platform-modal" role="dialog" aria-modal="true" aria-labelledby="plat-modal-title">
+  <div class="modal-header">
+    <div>
+      <div class="modal-title" id="plat-modal-title">Platforms nearby</div>
+      <div class="modal-subtitle">Sorted by distance · updates as you move · tap a tile for the Wikipedia entry</div>
+    </div>
+    <button class="modal-close" id="plat-modal-close" aria-label="Close">✕</button>
+  </div>
+  <div class="modal-body" id="plat-modal-body"></div>
+  <div class="modal-footer">
+    Offshore installations · curated · photos from Wikipedia
+  </div>
+</div>
+
 <div class="modal" id="bird-modal" role="dialog" aria-modal="true" aria-labelledby="bird-modal-title">
   <div class="modal-header">
     <div>
@@ -1710,9 +1724,12 @@ function startTracking() {
       }
       renderLiveStatus();
       renderLiveCard();
-      // If lighthouse modal is open, refresh its contents.
+      // If a gallery modal is open, refresh it as we move.
       if (document.getElementById('lighthouse-modal').classList.contains('open')) {
         populateLighthouseModal();
+      }
+      if (document.getElementById('platform-modal').classList.contains('open')) {
+        populatePlatformModal();
       }
     },
     err => {
@@ -1775,16 +1792,12 @@ function renderLiveCard() {
   }
   const coords = [[LIVE_POS.lat, LIVE_POS.lon]];
   const lhs = lighthousesNear(coords, 25);  // 25km ≈ 13.5nm
-  const plats = platformsNear(coords, 30);
+  const plats = platformsNear(coords, 50);  // ~27nm — rigs/flares are visible far at sea
   const course = shipCourse();
   const nmStr = km => (km * KM_TO_NM).toFixed(1);
 
   const platLine = plats.length
-    ? `<div class="disc-line"><span class="disc-icon">📍</span><span class="disc-body">${plats.map(pl => {
-        const icon = pl.type === 'wind' ? '🌬️' : '🛢️';
-        const dir = bearingLabel(pl.lat, pl.lon);
-        return `${icon} <em>${pl.name}</em> <span class="dim">${nmStr(pl.distKm)}nm ${dir}</span>`;
-      }).join(' · ')}</span></div>`
+    ? `<div class="disc-line"><span class="disc-icon">🛢️</span><span class="disc-body"><button class="platforms-trigger"><em>${plats.length} offshore platform${plats.length === 1 ? '' : 's'} within ~27nm</em> <span class="dim">→ tap for gallery</span></button></span></div>`
     : '';
 
   const lhLine = lhs.length
@@ -1858,17 +1871,17 @@ function renderLiveCard() {
   `;
 }
 
-// ---------- Lighthouse gallery modal ----------
-const LH_PHOTOS = {};
-async function getLighthousePhoto(name) {
-  if (LH_PHOTOS[name] !== undefined) return LH_PHOTOS[name];
+// ---------- Wikipedia thumbnail fetch (shared by the lighthouse + platform galleries) ----------
+const WIKI_THUMBS = {};
+async function getWikiThumb(term) {
+  if (WIKI_THUMBS[term] !== undefined) return WIKI_THUMBS[term];
   try {
-    const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name.replace(/ /g, '_'))}`);
-    if (!r.ok) { LH_PHOTOS[name] = null; return null; }
+    const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term.replace(/ /g, '_'))}`);
+    if (!r.ok) { WIKI_THUMBS[term] = null; return null; }
     const j = await r.json();
-    if (j.thumbnail?.source) { LH_PHOTOS[name] = j.thumbnail.source; return j.thumbnail.source; }
+    if (j.thumbnail?.source) { WIKI_THUMBS[term] = j.thumbnail.source; return j.thumbnail.source; }
   } catch {}
-  LH_PHOTOS[name] = null;
+  WIKI_THUMBS[term] = null;
   return null;
 }
 
@@ -1893,7 +1906,7 @@ function populateLighthouseModal() {
   }).join('')}</div>`;
   // Lazy-load photos
   for (const l of lhs) {
-    getLighthousePhoto(l.n).then(url => {
+    getWikiThumb(l.n).then(url => {
       if (!url) return;
       const wrap = body.querySelector(`.photo-wrap[data-name="${CSS.escape(l.n)}"]`);
       if (!wrap) return;
@@ -1909,6 +1922,50 @@ function openLighthouseModal() {
 }
 function closeLighthouseModal() {
   document.getElementById('lighthouse-modal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// ---------- Platform gallery modal (mirrors the lighthouse gallery) ----------
+function populatePlatformModal() {
+  if (!LIVE_POS) return;
+  const plats = platformsNear([[LIVE_POS.lat, LIVE_POS.lon]], 50);  // ~27nm
+  const body = document.getElementById('plat-modal-body');
+  const title = document.getElementById('plat-modal-title');
+  title.textContent = `${plats.length} platform${plats.length === 1 ? '' : 's'} within ~27nm`;
+  if (!plats.length) {
+    body.innerHTML = `<div class="placeholder" style="padding:24px 0">No platforms or wind farms in range right now.</div>`;
+    return;
+  }
+  body.innerHTML = `<div class="bird-grid">${plats.map(pl => {
+    const dir = bearingLabel(pl.lat, pl.lon);
+    const nm = (pl.distKm * KM_TO_NM).toFixed(1);
+    const icon = pl.type === 'wind' ? '🌬️' : '🛢️';
+    const key = (pl.wiki || pl.name).replace(/"/g, '&quot;');
+    return `<a class="bird-tile" href="${wikiHref(pl.wiki, pl.name + ' ' + pl.op)}" target="_blank" rel="noopener">
+      <div class="photo-wrap" data-name="${key}">${icon}</div>
+      <div class="name">${pl.name}</div>
+      <div class="meta">${nm}nm · ${dir}</div>
+    </a>`;
+  }).join('')}</div>`;
+  // Lazy-load photos only when we have a confident Wikipedia title (a bare name can pull a wrong image).
+  for (const pl of plats) {
+    if (!pl.wiki) continue;
+    getWikiThumb(pl.wiki).then(url => {
+      if (!url) return;
+      const wrap = body.querySelector(`.photo-wrap[data-name="${CSS.escape(pl.wiki)}"]`);
+      if (!wrap) return;
+      wrap.innerHTML = `<img src="${url}" alt="${pl.name}" loading="lazy">`;
+    });
+  }
+}
+function openPlatformModal() {
+  if (!LIVE_POS) return;
+  document.getElementById('platform-modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  populatePlatformModal();
+}
+function closePlatformModal() {
+  document.getElementById('platform-modal').classList.remove('open');
   document.body.style.overflow = '';
 }
 
@@ -2108,11 +2165,18 @@ function main() {
     if (e.target.closest('.lighthouses-trigger')) {
       e.preventDefault();
       openLighthouseModal();
+    } else if (e.target.closest('.platforms-trigger')) {
+      e.preventDefault();
+      openPlatformModal();
     }
   });
   document.getElementById('lh-modal-close').addEventListener('click', closeLighthouseModal);
   document.getElementById('lighthouse-modal').addEventListener('click', e => {
     if (e.target.id === 'lighthouse-modal') closeLighthouseModal();
+  });
+  document.getElementById('plat-modal-close').addEventListener('click', closePlatformModal);
+  document.getElementById('platform-modal').addEventListener('click', e => {
+    if (e.target.id === 'platform-modal') closePlatformModal();
   });
   setInterval(tickClocks, 30000);
 
