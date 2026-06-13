@@ -136,6 +136,7 @@
   .meta { display: flex; gap: 10px; font-size: 10.5px; color: var(--muted); flex-wrap: wrap; margin-top: 3px; }
   .meta .wave { color: var(--wave); }
   .meta .feels { color: var(--lo); }
+  .gps-weak { color: #ffcf6b; font-weight: 600; }
   .sun {
     display: flex; gap: 10px; font-size: 11px; color: var(--muted); flex-wrap: wrap;
     padding: 0 2px;
@@ -1251,9 +1252,10 @@ function renderHourlyHTML(p, data) {
   // On the port day itself, advance past hours already elapsed so the strip stays forward-looking.
   const isPortToday = new Date(p.d + 'T00:00:00').getTime() === TODAY.getTime();
   if (isPortToday) {
-    const now = new Date();
-    const nowSlot = times.find(t => t.startsWith(p.d) && new Date(t) >= now);
-    if (nowSlot) startH = Math.max(startH, parseInt(nowSlot.slice(11, 13), 10));
+    // Advance past hours already elapsed, using the current hour in the PORT's timezone
+    // (robust even if the phone's clock is on a different zone than the port).
+    const nowH = parseInt(new Intl.DateTimeFormat('en-US', { hour: '2-digit', hour12: false, timeZone: p.tz }).format(new Date()), 10) % 24;
+    startH = Math.max(startH, nowH);
   }
   if (startH > endH) return '';   // in-port window already elapsed
 
@@ -1824,6 +1826,12 @@ function renderLiveCard() {
   const kt = shipSpeedKt();
   const knots = kt != null ? kt.toFixed(1) + ' kt' : 'stationary';
   const courseStr = course != null ? `${cardinalDir(course)} ${Math.round(course)}°` : '—';
+  // Flag a weak / wifi-derived fix: when accuracy is poor the position is likely stuck (e.g. inside the
+  // hull on ship wifi), so speed and everything below is unreliable until there's real sky view.
+  const weakGps = LIVE_POS.accuracy != null && LIVE_POS.accuracy > 100;
+  const gpsHint = weakGps
+    ? `<div class="disc-line"><span class="disc-icon">📡</span><span class="disc-body gps-weak">Weak GPS (±${Math.round(LIVE_POS.accuracy)}m) — move near a window or out on deck for accurate position &amp; speed.</span></div>`
+    : '';
 
   card.innerHTML = `
     <span class="badge live-badge">LIVE</span>
@@ -1837,6 +1845,7 @@ function renderLiveCard() {
       </div>
     </div>
     <div class="discoveries">
+      ${gpsHint}
       ${zoneLine}
       ${landLine}
       ${depthLine}
