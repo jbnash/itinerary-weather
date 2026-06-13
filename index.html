@@ -1840,9 +1840,9 @@ function renderLiveCard() {
   const kt = shipSpeedKt();
   const knots = kt != null ? kt.toFixed(1) + ' kt' : 'stationary';
   const courseStr = course != null ? `${cardinalDir(course)} ${Math.round(course)}°` : '—';
-  // Flag a weak / wifi-derived fix: when accuracy is poor the position is likely stuck (e.g. inside the
-  // hull on ship wifi), so speed and everything below is unreliable until there's real sky view.
-  const weakGps = LIVE_POS.accuracy != null && LIVE_POS.accuracy > 100;
+  // Flag a soft fix: open-sky GPS is ±5–15m, so anything looser than ~30m means a partial lock or a
+  // stuck wifi-derived position (e.g. inside the hull) — speed/course and everything below get shaky.
+  const weakGps = LIVE_POS.accuracy != null && LIVE_POS.accuracy > 30;
   const gpsHint = weakGps
     ? `<div class="disc-line"><span class="disc-icon">📡</span><span class="disc-body gps-weak">Weak GPS (±${Math.round(LIVE_POS.accuracy)}m) — move near a window or out on deck for accurate position &amp; speed.</span></div>`
     : '';
