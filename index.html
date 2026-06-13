@@ -1608,16 +1608,39 @@ function nauticalRelative(relBearing) {
                    'astern','off port quarter','off port beam','off port bow'];
   return sectors[Math.round(relBearing / 45) % 8];
 }
+// Pick a stable baseline pair from GPS history (~8s apart when available) for deriving course + speed
+// without relying on coords.heading / coords.speed, which iOS Safari frequently reports as null at sea.
+function liveBaseline() {
+  const n = LIVE_HISTORY.length;
+  if (n < 2) return null;
+  const b = LIVE_HISTORY[n - 1];
+  let a = LIVE_HISTORY[0];
+  for (let i = n - 2; i >= 0; i--) {
+    if ((b.ts - LIVE_HISTORY[i].ts) / 1000 >= 8) { a = LIVE_HISTORY[i]; break; }
+  }
+  return { a, b, dtSec: (b.ts - a.ts) / 1000, distM: haversineKm(a.lat, a.lon, b.lat, b.lon) * 1000 };
+}
 function shipCourse() {
-  // Prefer device-provided heading when actually moving; otherwise compute from history.
+  // Prefer the device heading when it's moving; otherwise infer course from the GPS baseline.
   if (LIVE_POS?.heading != null && !isNaN(LIVE_POS.heading) && (LIVE_POS.speed ?? 0) > 0.5) {
     return LIVE_POS.heading;
   }
-  if (LIVE_HISTORY.length < 2) return null;
-  const a = LIVE_HISTORY[LIVE_HISTORY.length - 2];
-  const b = LIVE_HISTORY[LIVE_HISTORY.length - 1];
-  if (haversineKm(a.lat, a.lon, b.lat, b.lon) < 0.02) return null;  // didn't really move
-  return bearingDeg(a.lat, a.lon, b.lat, b.lon);
+  const base = liveBaseline();
+  if (!base || base.distM < 12) return null;  // not enough movement to infer a heading
+  return bearingDeg(base.a.lat, base.a.lon, base.b.lat, base.b.lon);
+}
+// Speed over ground in knots, or null when stopped/unknown. coords.speed is best when present, but
+// iOS Safari often returns null at sea — so fall back to distance / elapsed-time across recent fixes.
+function shipSpeedKt() {
+  if (LIVE_POS?.speed != null && !isNaN(LIVE_POS.speed) && LIVE_POS.speed > 0.1) {
+    return LIVE_POS.speed * 1.94384;  // m/s → knots
+  }
+  const base = liveBaseline();
+  if (base && base.dtSec >= 3 && base.distM > 12) {
+    const kt = (base.distM / base.dtSec) * 1.94384;
+    if (kt < 60) return kt;  // ignore implausible GPS jumps
+  }
+  return null;
 }
 function bearingLabel(targetLat, targetLon) {
   // Returns "off port bow" if ship course is known, otherwise cardinal "NW".
@@ -1676,8 +1699,12 @@ function startTracking() {
     pos => {
       const { latitude, longitude, accuracy, speed, heading } = pos.coords;
       LIVE_POS = { lat: latitude, lon: longitude, accuracy, speed, heading, ts: pos.timestamp };
-      LIVE_HISTORY.push(LIVE_POS);
-      if (LIVE_HISTORY.length > 5) LIVE_HISTORY.shift();
+      // Keep a short trail of distinct fixes for course/speed estimation (dedupe repeated cached fixes).
+      const prev = LIVE_HISTORY[LIVE_HISTORY.length - 1];
+      if (!prev || prev.ts !== LIVE_POS.ts) {
+        LIVE_HISTORY.push(LIVE_POS);
+        if (LIVE_HISTORY.length > 15) LIVE_HISTORY.shift();
+      }
       renderLiveStatus();
       renderLiveCard();
       // If lighthouse modal is open, refresh its contents.
@@ -1717,9 +1744,8 @@ function stopTracking(keepErrorMsg = false) {
 function renderLiveStatus() {
   const s = document.getElementById('live-status');
   if (!LIVE_POS) return;
-  const knots = (LIVE_POS.speed != null && !isNaN(LIVE_POS.speed) && LIVE_POS.speed > 0.1)
-    ? (LIVE_POS.speed * 1.94384).toFixed(1) + ' kt'
-    : 'stationary';
+  const kt = shipSpeedKt();
+  const knots = kt != null ? kt.toFixed(1) + ' kt' : 'stationary';
   const course = shipCourse();
   const headingStr = course != null ? `heading ${cardinalDir(course)} ${Math.round(course)}°` : '';
   // Find next upcoming port + distance
@@ -1795,9 +1821,8 @@ function renderLiveCard() {
       ).join(' · ')}</span></div>`
     : '';
 
-  const knots = (LIVE_POS.speed != null && LIVE_POS.speed > 0.1)
-    ? (LIVE_POS.speed * 1.94384).toFixed(1) + ' kt'
-    : 'stationary';
+  const kt = shipSpeedKt();
+  const knots = kt != null ? kt.toFixed(1) + ' kt' : 'stationary';
   const courseStr = course != null ? `${cardinalDir(course)} ${Math.round(course)}°` : '—';
 
   card.innerHTML = `
