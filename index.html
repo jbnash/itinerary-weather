@@ -187,14 +187,14 @@
   .disc-line .bird-recent { color: var(--ink); font-weight: 500; }
   .disc-line .bird-notable { color: #ffd479; font-weight: 600; }
   .disc-line .bird-notable:hover, .disc-line .bird-recent:hover { text-decoration: underline; }
-  .birds-trigger {
+  .birds-trigger, .lighthouses-trigger, .platforms-trigger {
     background: none; border: none; padding: 0; cursor: pointer;
     color: inherit; font: inherit; text-align: left;
     -webkit-tap-highlight-color: rgba(108,193,255,0.15);
   }
   /* Matches the sighting links: accent + dotted underline so it reads as tappable on touch. */
-  .birds-trigger em { color: var(--accent); font-style: normal; font-weight: 600; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
-  .birds-trigger:hover em { text-decoration-style: solid; }
+  .birds-trigger em, .lighthouses-trigger em, .platforms-trigger em { color: var(--accent); font-style: normal; font-weight: 600; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+  .birds-trigger:hover em, .lighthouses-trigger:hover em, .platforms-trigger:hover em { text-decoration-style: solid; }
 
   /* Bird gallery modal */
   .modal {
