@@ -1733,11 +1733,17 @@ function startTracking() {
       }
     },
     err => {
-      const msg = err.code === 1 ? 'Permission denied — tap to retry'
-                 : err.code === 2 ? 'Position unavailable'
-                 : 'GPS timed out';
-      status.innerHTML = `<span class="err">📍 ${msg}</span>`;
-      stopTracking(true);
+      if (err.code === 1) {
+        // Permission denied — not recoverable without the user acting, so stop and prompt a retry.
+        status.innerHTML = `<span class="err">📍 Location permission denied — tap to retry</span>`;
+        stopTracking(true);
+        return;
+      }
+      // POSITION_UNAVAILABLE / TIMEOUT are usually transient at sea (inside the hull, weak signal).
+      // Keep the watch running so it recovers on its own once GPS gets sky view — don't kill tracking.
+      if (!LIVE_POS) {
+        status.innerHTML = `<span class="err">📍 Searching for GPS — move toward a window or out on deck…</span>`;
+      }
     },
     { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 }
   );
