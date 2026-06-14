@@ -2085,9 +2085,10 @@ function closeBirdModal() {
 
 function getCurrentDayIdx() {
   // Today's card if today matches an itinerary date; otherwise first upcoming (could be NEXT_IDX);
-  // if cruise is over, fall back to 0.
-  const todayISO = TODAY.toISOString().slice(0,10);
-  let idx = PORTS.findIndex(p => p.d === todayISO);
+  // if cruise is over, fall back to 0. Use daysUntil (compares local-to-local) rather than
+  // TODAY.toISOString() — that converts local midnight to UTC and, in timezones ahead of UTC (e.g.
+  // the ship in CEST), reports yesterday's date, which pinned the past day at the top of the grid.
+  let idx = PORTS.findIndex(p => daysUntil(p.d) === 0);
   if (idx >= 0) return idx;
   idx = PORTS.findIndex(p => daysUntil(p.d) >= 0);
   return idx >= 0 ? idx : 0;
